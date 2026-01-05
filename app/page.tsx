@@ -1,10 +1,10 @@
 "use client";
-import { Navbar } from "./components/layout/navbar";
-import { Hero } from "./components/layout/hero";
-import { FeatureGrid } from "./components/layout/feature-grid";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { useScroll, useSpring,motion } from "framer-motion";
+import { Navbar } from "@/components/layout/navbar";
+import { Hero } from "@/components/layout/hero";
+import { FeatureGrid } from "@/components/layout/feature-grid";
 
 
 export default function Home() {

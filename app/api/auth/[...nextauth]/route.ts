@@ -1,7 +1,7 @@
-import NextAuth from "next-auth";
+import NextAuth, { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 
-export const authOptions = {
+export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
       name: "Credentials",
@@ -12,60 +12,68 @@ export const authOptions = {
       async authorize(credentials) {
         if (!credentials) return null;
 
-        // Call your backend API
-        const res = await fetch("http://localhost:8080/api/v1/auth/login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            emailOrPhonenumber: credentials.username,
-            password: credentials.password,
-          }),
-        });
-        const user = await res.json();
+        try {
+          // Call your backend API
+          const res = await fetch("http://localhost:8080/api/v1/auth/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              emailOrPhonenumber: credentials.username,
+              password: credentials.password,
+            }),
+          });
 
-        // If login fails
-        if (!res.ok || !user) {
+          if (!res.ok) {
+            return null;
+          }
+
+          const data = await res.json();
+
+          // If login fails
+          if (!data) {
+            return null;
+          }
+
+          // Return user object
+          return {
+            id: data.data?.id || "1",
+            name: data.data?.fullName || credentials.username,
+            email: data.data?.email || "",
+            token: data.data,
+          };
+        } catch (error) {
+          console.error("Auth error:", error);
           return null;
         }
-
-        // You can attach JWT or other info to session
-        return {
-          token: user.data,
-        };
       },
     }),
   ],
 
   session: {
-    strategy: "jwt", // use JWT strategy
+    strategy: "jwt",
   },
 
   callbacks: {
     async jwt({ token, user }) {
-      // First login
       if (user) {
-        token.accessToken = user.token;
-        token.role = user.role;
+        token.accessToken = (user as { token?: string }).token;
       }
       return token;
     },
     async session({ session, token }) {
-      session.user = {
-        ...session.user,
-        token: token.accessToken,
-        role: token.role,
+      return {
+        ...session,
+        accessToken: token.accessToken,
       };
-      return session;
     },
   },
 
   pages: {
-    signIn: "/login", // your login page
+    signIn: "/login",
   },
 
-  secret: process.env.NEXTAUTH_SECRET || "super-secret-key",
+  secret: process.env.NEXTAUTH_SECRET || "your-super-secret-key-change-in-production",
 };
 
 const handler = NextAuth(authOptions);
 export { handler as GET, handler as POST };
-

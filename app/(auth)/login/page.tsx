@@ -6,15 +6,19 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { signIn } from "next-auth/react";
 import { Button } from "@/components/ui/button";
-import { Eye, EyeOff, Mail, Lock, ArrowRight, AlertCircle } from "lucide-react";
+import { Eye, EyeOff, Mail, Lock, ArrowRight, AlertCircle, Phone } from "lucide-react";
+
+type LoginMethod = "email" | "phone";
 
 export default function LoginPage() {
   const router = useRouter();
+  const [loginMethod, setLoginMethod] = useState<LoginMethod>("email");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     email: "",
+    phoneNumber: "",
     password: "",
     remember: false,
   });
@@ -25,7 +29,6 @@ export default function LoginPage() {
       ...prev,
       [name]: type === "checkbox" ? checked : value,
     }));
-    // Clear error when user types
     if (error) setError(null);
   };
 
@@ -34,15 +37,17 @@ export default function LoginPage() {
     setIsLoading(true);
     setError(null);
 
+    const username = loginMethod === "email" ? formData.email : formData.phoneNumber;
+
     try {
       const result = await signIn("credentials", {
-        username: formData.email,
+        username,
         password: formData.password,
         redirect: false,
       });
 
       if (result?.error) {
-        setError("Invalid email or password. Please try again.");
+        setError(`Invalid ${loginMethod === "email" ? "email" : "phone number"} or password. Please try again.`);
       } else if (result?.ok) {
         router.push("/dashboard");
         router.refresh();
@@ -76,6 +81,39 @@ export default function LoginPage() {
         </motion.p>
       </div>
 
+      {/* Login Method Toggle */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.18 }}
+        className="flex p-1 rounded-xl bg-muted border border-border"
+      >
+        <button
+          type="button"
+          onClick={() => setLoginMethod("email")}
+          className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all ${
+            loginMethod === "email"
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <Mail className="w-4 h-4" />
+          Email
+        </button>
+        <button
+          type="button"
+          onClick={() => setLoginMethod("phone")}
+          className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all ${
+            loginMethod === "phone"
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <Phone className="w-4 h-4" />
+          Phone
+        </button>
+      </motion.div>
+
       {/* Error Message */}
       {error && (
         <motion.div
@@ -96,24 +134,42 @@ export default function LoginPage() {
         onSubmit={handleSubmit}
         className="space-y-4"
       >
-        {/* Email */}
+        {/* Email or Phone */}
         <div className="space-y-2">
-          <label htmlFor="email" className="text-sm font-medium">
-            Email
+          <label htmlFor={loginMethod} className="text-sm font-medium">
+            {loginMethod === "email" ? "Email" : "Phone number"}
           </label>
           <div className="relative">
-            <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-            <input
-              id="email"
-              name="email"
-              type="email"
-              value={formData.email}
-              onChange={handleChange}
-              placeholder="name@company.com"
-              className="w-full h-12 pl-12 pr-4 rounded-xl bg-muted border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent-blue focus:ring-1 focus:ring-accent-blue transition-all"
-              required
-              disabled={isLoading}
-            />
+            {loginMethod === "email" ? (
+              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+            ) : (
+              <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+            )}
+            {loginMethod === "email" ? (
+              <input
+                id="email"
+                name="email"
+                type="email"
+                value={formData.email}
+                onChange={handleChange}
+                placeholder="name@example.com"
+                className="w-full h-12 pl-12 pr-4 rounded-xl bg-muted border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent-blue focus:ring-1 focus:ring-accent-blue transition-all"
+                required
+                disabled={isLoading}
+              />
+            ) : (
+              <input
+                id="phoneNumber"
+                name="phoneNumber"
+                type="tel"
+                value={formData.phoneNumber}
+                onChange={handleChange}
+                placeholder="+1 (555) 000-0000"
+                className="w-full h-12 pl-12 pr-4 rounded-xl bg-muted border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent-blue focus:ring-1 focus:ring-accent-blue transition-all"
+                required
+                disabled={isLoading}
+              />
+            )}
           </div>
         </div>
 
