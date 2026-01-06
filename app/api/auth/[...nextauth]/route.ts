@@ -1,7 +1,7 @@
 import NextAuth from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 
-const baseUrl = process.env.BASE_URL || process.env.API_URL || "http://localhost:8080/api/v1";
+const baseUrl = process.env.NEXT_PUBLIC_BASE_URL  ;
 
 export const authOptions = {
   providers: [
