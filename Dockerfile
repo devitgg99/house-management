@@ -39,13 +39,6 @@ COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 
-# Build arguments for environment variables
-ARG NEXTAUTH_URL
-ARG NEXTAUTH_SECRET
-
-ENV NEXTAUTH_URL=$NEXTAUTH_URL
-ENV NEXTAUTH_SECRET=$NEXTAUTH_SECRET
-
 # Build the application
 RUN npm run build
 
@@ -91,4 +84,3 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 
 # Start the application
 CMD ["node", "server.js"]
-

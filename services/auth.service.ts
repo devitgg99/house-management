@@ -1,4 +1,4 @@
-const baseUrl = process.env.API_URL;
+const baseUrl = process.env.API_URL || "http://localhost:8080/api/v1";
 
 export const RegisterService = async (data: Record<string, unknown>) => {
   try {
