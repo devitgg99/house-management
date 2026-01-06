@@ -1,6 +1,8 @@
 import NextAuth from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 
+const baseUrl = process.env.BASE_URL
+
 export const authOptions = {
   providers: [
     CredentialsProvider({
@@ -14,7 +16,7 @@ export const authOptions = {
         if (!credentials) return null;
 
         // Call your backend API
-        const res = await fetch(`${process.env.BASE_URL}/auth/login`, {
+        const res = await fetch(`${baseUrl}/auth/login`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
