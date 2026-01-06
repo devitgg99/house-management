@@ -1,75 +1,40 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { Eye, EyeOff, Mail, Lock, User, ArrowRight, Check, Home, Key, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Eye, EyeOff, Mail, Lock, User, Phone, ArrowRight, Check, Home, Key } from "lucide-react";
+import { registerAction } from "@/actions/auth/registerAction";
 
 export default function RegisterPage() {
-  const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
   const [formData, setFormData] = useState({
     fullName: "",
     phoneNumber: "",
     email: "",
     password: "",
-    role: "RENTER" as "RENTER" | "HOUSEOWNER",
+    role: "",
   });
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
-    if (error) setError(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
     setIsLoading(true);
-    setError(null);
-
-    // Prepare request body matching API structure
-    const requestBody = {
-      fullName: formData.fullName,
-      phoneNumber: `+855${formData.phoneNumber.replace(/\s/g, '')}`,
-      password: formData.password,
-      email: formData.email,
-      role: formData.role,
-    };
-
     try {
-      const response = await fetch("http://localhost:8080/api/v1/auth/register", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(requestBody),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        // Handle API error response
-        throw new Error(data.message || "Registration failed. Please try again.");
-      }
-
-      // Success
-      setSuccess(true);
-      
-      // Redirect to login after 2 seconds
-      setTimeout(() => {
-        router.push("/login");
-      }, 2000);
-
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
-    } finally {
-      setIsLoading(false);
+        const res = await registerAction(
+            formData
+        )
+    } catch (error) {
+        
     }
+    setIsLoading(false);
   };
 
   // Password strength checks
@@ -78,32 +43,6 @@ export default function RegisterPage() {
     { label: "Contains uppercase", valid: /[A-Z]/.test(formData.password) },
     { label: "Contains number", valid: /[0-9]/.test(formData.password) },
   ];
-
-  // Success state
-  if (success) {
-    return (
-      <div className="space-y-6 text-center">
-        <motion.div
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          className="w-16 h-16 mx-auto rounded-full bg-green-500/10 flex items-center justify-center"
-        >
-          <CheckCircle2 className="w-8 h-8 text-green-500" />
-        </motion.div>
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="space-y-2"
-        >
-          <h2 className="text-2xl font-bold">Account created!</h2>
-          <p className="text-muted-foreground">
-            Redirecting you to login...
-          </p>
-        </motion.div>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6">
@@ -126,18 +65,6 @@ export default function RegisterPage() {
           Start managing your properties in minutes
         </motion.p>
       </div>
-
-      {/* Error Message */}
-      {error && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm"
-        >
-          <AlertCircle className="w-4 h-4 shrink-0" />
-          {error}
-        </motion.div>
-      )}
 
       {/* Form */}
       <motion.form
@@ -173,19 +100,16 @@ export default function RegisterPage() {
           <label htmlFor="phoneNumber" className="text-sm font-medium">
             Phone number
           </label>
-          <div className="flex">
-            <div className="flex items-center gap-1.5 px-3 h-12 rounded-l-xl bg-muted/80 border border-r-0 border-border text-muted-foreground text-sm font-medium">
-              <span className="text-base">🇰🇭</span>
-              <span>+855</span>
-            </div>
+          <div className="relative">
+            <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
             <input
               id="phoneNumber"
               name="phoneNumber"
               type="tel"
               value={formData.phoneNumber}
               onChange={handleChange}
-              placeholder="12 345 678"
-              className="flex-1 h-12 pl-3 pr-4 rounded-r-xl bg-muted border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent-blue focus:ring-1 focus:ring-accent-blue transition-all"
+              placeholder="+1 (555) 000-0000"
+              className="w-full h-12 pl-12 pr-4 rounded-xl bg-muted border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent-blue focus:ring-1 focus:ring-accent-blue transition-all"
               required
               disabled={isLoading}
             />
@@ -268,7 +192,7 @@ export default function RegisterPage() {
 
         {/* Role */}
         <div className="space-y-2">
-          <label className="text-sm font-medium">
+          <label htmlFor="role" className="text-sm font-medium">
             I am a
           </label>
           <div className="grid grid-cols-2 gap-3">
