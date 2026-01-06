@@ -1,18 +1,17 @@
-import { useSession } from "next-auth/react";
-
-
-const userSession = useSession()
 const baseUrl = process.env.API_URL;
-export const RegisterService = async () => {
+
+export const RegisterService = async (data: Record<string, unknown>) => {
   try {
-    const header = userSession.data;
     const res = await fetch(`${baseUrl}/auth/register`, {
       method: "POST",
-      body:
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(data),
     });
     const text = await res.text();
-    const data = JSON.parse(text);
-    return data;
+    const result = JSON.parse(text);
+    return result;
   } catch (e) {
     return {
       success: false,
