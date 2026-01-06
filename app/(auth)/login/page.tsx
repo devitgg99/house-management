@@ -37,7 +37,7 @@ export default function LoginPage() {
     setIsLoading(true);
     setError(null);
 
-    const username = loginMethod === "email" ? formData.email : formData.phoneNumber;
+    const username = loginMethod === "email" ? formData.email : `+855${formData.phoneNumber.replace(/\s/g, '')}`;
 
     try {
       const result = await signIn("credentials", {
@@ -139,13 +139,9 @@ export default function LoginPage() {
           <label htmlFor={loginMethod} className="text-sm font-medium">
             {loginMethod === "email" ? "Email" : "Phone number"}
           </label>
-          <div className="relative">
-            {loginMethod === "email" ? (
+          {loginMethod === "email" ? (
+            <div className="relative">
               <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-            ) : (
-              <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-            )}
-            {loginMethod === "email" ? (
               <input
                 id="email"
                 name="email"
@@ -157,20 +153,26 @@ export default function LoginPage() {
                 required
                 disabled={isLoading}
               />
-            ) : (
+            </div>
+          ) : (
+            <div className="flex">
+              <div className="flex items-center gap-1.5 px-3 h-12 rounded-l-xl bg-muted/80 border border-r-0 border-border text-muted-foreground text-sm font-medium">
+                <span className="text-base">🇰🇭</span>
+                <span>+855</span>
+              </div>
               <input
                 id="phoneNumber"
                 name="phoneNumber"
                 type="tel"
                 value={formData.phoneNumber}
                 onChange={handleChange}
-                placeholder="+1 (555) 000-0000"
-                className="w-full h-12 pl-12 pr-4 rounded-xl bg-muted border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent-blue focus:ring-1 focus:ring-accent-blue transition-all"
+                placeholder="12 345 678"
+                className="flex-1 h-12 pl-3 pr-4 rounded-r-xl bg-muted border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent-blue focus:ring-1 focus:ring-accent-blue transition-all"
                 required
                 disabled={isLoading}
               />
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
         {/* Password */}

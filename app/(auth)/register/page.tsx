@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { Eye, EyeOff, Mail, Lock, User, Phone, ArrowRight, Check, Home, Key, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Eye, EyeOff, Mail, Lock, User, ArrowRight, Check, Home, Key, AlertCircle, CheckCircle2 } from "lucide-react";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -35,7 +35,7 @@ export default function RegisterPage() {
     // Prepare request body matching API structure
     const requestBody = {
       fullName: formData.fullName,
-      phoneNumber: formData.phoneNumber,
+      phoneNumber: `+855${formData.phoneNumber.replace(/\s/g, '')}`,
       password: formData.password,
       email: formData.email,
       role: formData.role,
@@ -173,16 +173,19 @@ export default function RegisterPage() {
           <label htmlFor="phoneNumber" className="text-sm font-medium">
             Phone number
           </label>
-          <div className="relative">
-            <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+          <div className="flex">
+            <div className="flex items-center gap-1.5 px-3 h-12 rounded-l-xl bg-muted/80 border border-r-0 border-border text-muted-foreground text-sm font-medium">
+              <span className="text-base">🇰🇭</span>
+              <span>+855</span>
+            </div>
             <input
               id="phoneNumber"
               name="phoneNumber"
               type="tel"
               value={formData.phoneNumber}
               onChange={handleChange}
-              placeholder="+1 (555) 000-0000"
-              className="w-full h-12 pl-12 pr-4 rounded-xl bg-muted border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent-blue focus:ring-1 focus:ring-accent-blue transition-all"
+              placeholder="12 345 678"
+              className="flex-1 h-12 pl-3 pr-4 rounded-r-xl bg-muted border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent-blue focus:ring-1 focus:ring-accent-blue transition-all"
               required
               disabled={isLoading}
             />
