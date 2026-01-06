@@ -1,17 +1,20 @@
+import { RegisterRequest } from "@/types/auth/Register";
+
 const baseUrl = process.env.BASE_URL;
 
-export const RegisterService = async (data: Record<string, unknown>) => {
+export const RegisterService = async (registerRequest : RegisterRequest) => {
   try {
     const res = await fetch(`${baseUrl}/auth/register`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(data),
-    });
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(registerRequest),
+  });
+  console.log("res",res)
     const text = await res.text();
-    const result = JSON.parse(text);
-    return result;
+    const data = JSON.parse(text);
+    return data;
   } catch (e) {
     return {
       success: false,
