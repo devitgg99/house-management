@@ -1,7 +1,7 @@
 import NextAuth from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 
-const baseUrl = process.env.BASE_URL
+const baseUrl = process.env.BASE_URL || process.env.API_URL || "http://localhost:8080/api/v1";
 
 export const authOptions = {
   providers: [
@@ -15,44 +15,54 @@ export const authOptions = {
       async authorize(credentials) {
         if (!credentials) return null;
 
-        // Call your backend API
-        const res = await fetch(`${baseUrl}/auth/login`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            emailOrPhonenumber: credentials.username,
-            password: credentials.password,
-          }),
-        });
-        const user = await res.json();
+        try {
+          const res = await fetch(`${baseUrl}/auth/login`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              emailOrPhonenumber: credentials.username,
+              password: credentials.password,
+            }),
+          });
 
-        // If login fails
-        if (!res.ok || !user) {
+          if (!res.ok) {
+            return null;
+          }
+
+          const data = await res.json();
+
+          if (!data) {
+            return null;
+          }
+
+          // Return User object with required 'id' property
+          return {
+            id: data.data?.id?.toString() || "1",
+            name: data.data?.fullName || credentials.username,
+            email: data.data?.email || "",
+            token: data.data,
+          };
+        } catch (error) {
+          console.error("Auth error:", error);
           return null;
         }
-
-        // You can attach JWT or other info to session
-        return {
-          token: user.data,
-        };
       },
     }),
   ],
 
   session: {
-    strategy: "jwt",
+    strategy: "jwt" as const,
   },
 
   callbacks: {
-    async jwt({ token, user }) {
-      // First login
+    async jwt({ token, user }: { token: any; user: any }) {
       if (user) {
         token.accessToken = user.token;
         token.role = user.role;
       }
       return token;
     },
-    async session({ session, token }) {
+    async session({ session, token }: { session: any; token: any }) {
       session.user = {
         ...session.user,
         token: token.accessToken,
@@ -63,13 +73,11 @@ export const authOptions = {
   },
 
   pages: {
-    signIn: "/login", // your login page
+    signIn: "/login",
   },
 
-  secret: process.env.NEXTAUTH_SECRET || "super-secret-key",
+  secret: process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET || "super-secret-key",
 };
 
 const handler = NextAuth(authOptions);
 export { handler as GET, handler as POST };
-
-
