@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { signIn } from "next-auth/react";
@@ -12,7 +11,6 @@ import { toast } from "sonner";
 type LoginMethod = "email" | "phone";
 
 export default function LoginPage() {
-  const router = useRouter();
   const [loginMethod, setLoginMethod] = useState<LoginMethod>("email");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -40,28 +38,17 @@ export default function LoginPage() {
       : `+855${formData.phoneNumber.replace(/\s/g, '')}`;
 
     try {
-      const result = await signIn("credentials", {
+      // Use redirect: true to let NextAuth handle the redirect properly
+      await signIn("credentials", {
         username,
         password: formData.password,
-        redirect: false,
+        callbackUrl: "/dashboard",
+        redirect: true,
       });
-
-      if (result?.error) {
-        toast.error("Login failed", {
-          description: `Invalid ${loginMethod === "email" ? "email" : "phone number"} or password`,
-        });
-      } else if (result?.ok) {
-        toast.success("Welcome back!", {
-          description: "Redirecting to dashboard...",
-        });
-        router.push("/dashboard");
-        router.refresh();
-      }
     } catch {
       toast.error("Something went wrong", {
         description: "Please check your connection and try again",
       });
-    } finally {
       setIsLoading(false);
     }
   };

@@ -6,8 +6,8 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Eye, EyeOff, Mail, Lock, User, ArrowRight, Check, Home, Key } from "lucide-react";
-import { registerAction } from "@/actions/auth/registerAction";
 import { toast } from "sonner";
+import { RegisterAction } from "@/actions/auth/RegisterAction";
 
 export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
@@ -47,7 +47,7 @@ export default function RegisterPage() {
         phoneNumber: `+855${formData.phoneNumber.replace(/^0+/, "")}`,
       };
 
-      const res = await registerAction(requestData);
+      const res = await RegisterAction(requestData);
 
       if (res.success) {
         toast.success("Account created successfully!", {

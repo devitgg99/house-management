@@ -1,7 +1,19 @@
 import NextAuth from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
+import type { UserRole } from "@/types/next-auth";
 
-const baseUrl = process.env.NEXT_PUBLIC_API_URL  ;
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
+// Decode JWT payload without verification (just to extract user data)
+function decodeJWT(token: string) {
+  try {
+    const base64Payload = token.split('.')[1];
+    const payload = Buffer.from(base64Payload, 'base64').toString('utf-8');
+    return JSON.parse(payload);
+  } catch {
+    return null;
+  }
+}
 
 export const authOptions = {
   providers: [
@@ -16,7 +28,8 @@ export const authOptions = {
         if (!credentials) return null;
 
         try {
-          const res = await fetch(`${baseUrl}/auth/login`, {
+          console.log("API_URL:", API_URL);
+          const res = await fetch(`${API_URL}/auth/login`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -25,22 +38,30 @@ export const authOptions = {
             }),
           });
 
-          if (!res.ok) {
-            return null;
-          }
+          console.log("Login response status:", res.status);
 
-          const data = await res.json();
+          if (!res.ok) return null;
 
-          if (!data) {
-            return null;
-          }
+          const response = await res.json();
+          console.log("Login data:", response);
 
-          // Return User object with required 'id' property
+          if (!response?.success || !response?.data) return null;
+
+          // The API returns JWT token as string in data field
+          const jwtToken = response.data;
+          const decoded = decodeJWT(jwtToken);
+          
+          console.log("Decoded JWT:", decoded);
+
+          if (!decoded) return null;
+
+          // Extract user info from JWT payload
           return {
-            id: data.data?.id?.toString() || "1",
-            name: data.data?.fullName || credentials.username,
-            email: data.data?.email || "",
-            token: data.data,
+            id: decoded.userId || "1",
+            name: decoded.sub || credentials.username, // sub contains email
+            email: decoded.sub || "",
+            role: (decoded.role as UserRole) || "RENTER",
+            token: jwtToken,
           };
         } catch (error) {
           console.error("Auth error:", error);
@@ -57,17 +78,18 @@ export const authOptions = {
   callbacks: {
     async jwt({ token, user }: { token: any; user: any }) {
       if (user) {
-        token.accessToken = user.token;
+        token.id = user.id;
         token.role = user.role;
+        token.accessToken = user.token;
       }
       return token;
     },
     async session({ session, token }: { session: any; token: any }) {
-      session.user = {
-        ...session.user,
-        token: token.accessToken,
-        role: token.role,
-      };
+      if (session.user) {
+        session.user.id = token.id;
+        session.user.role = token.role;
+        session.user.token = token.accessToken;
+      }
       return session;
     },
   },
@@ -76,7 +98,7 @@ export const authOptions = {
     signIn: "/login",
   },
 
-  secret: process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET || "super-secret-key",
+  secret: process.env.NEXTAUTH_SECRET || "super-secret-key",
 };
 
 const handler = NextAuth(authOptions);
