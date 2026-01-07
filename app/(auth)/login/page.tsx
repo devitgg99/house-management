@@ -6,7 +6,8 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { signIn } from "next-auth/react";
 import { Button } from "@/components/ui/button";
-import { Eye, EyeOff, Mail, Lock, ArrowRight, AlertCircle, Phone } from "lucide-react";
+import { Eye, EyeOff, Mail, Lock, ArrowRight, Phone } from "lucide-react";
+import { toast } from "sonner";
 
 type LoginMethod = "email" | "phone";
 
@@ -15,7 +16,6 @@ export default function LoginPage() {
   const [loginMethod, setLoginMethod] = useState<LoginMethod>("email");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     email: "",
     phoneNumber: "",
@@ -29,13 +29,11 @@ export default function LoginPage() {
       ...prev,
       [name]: type === "checkbox" ? checked : value,
     }));
-    if (error) setError(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    setError(null);
 
     const username = loginMethod === "email" ? formData.email : `+855${formData.phoneNumber.replace(/\s/g, '')}`;
 
@@ -47,13 +45,20 @@ export default function LoginPage() {
       });
 
       if (result?.error) {
-        setError(`Invalid ${loginMethod === "email" ? "email" : "phone number"} or password. Please try again.`);
+        toast.error("Login failed", {
+          description: `Invalid ${loginMethod === "email" ? "email" : "phone number"} or password`,
+        });
       } else if (result?.ok) {
+        toast.success("Welcome back!", {
+          description: "Redirecting to dashboard...",
+        });
         router.push("/dashboard");
         router.refresh();
       }
     } catch {
-      setError("Something went wrong. Please try again.");
+      toast.error("Something went wrong", {
+        description: "Please check your connection and try again",
+      });
     } finally {
       setIsLoading(false);
     }
@@ -113,18 +118,6 @@ export default function LoginPage() {
           Phone
         </button>
       </motion.div>
-
-      {/* Error Message */}
-      {error && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm"
-        >
-          <AlertCircle className="w-4 h-4 shrink-0" />
-          {error}
-        </motion.div>
-      )}
 
       {/* Form */}
       <motion.form
