@@ -1,36 +1,69 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Button } from "@/components/ui/button";
-import { Eye, EyeOff, Mail, Lock, ArrowRight } from "lucide-react";
 import { signIn } from "next-auth/react";
-import { useRouter } from "next/router";
+import { Button } from "@/components/ui/button";
+import { Eye, EyeOff, Mail, Lock, ArrowRight, Phone } from "lucide-react";
+import { toast } from "sonner";
+
+type LoginMethod = "email" | "phone";
 
 export default function LoginPage() {
+  const router = useRouter();
+  const [loginMethod, setLoginMethod] = useState<LoginMethod>("email");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const router = useRouter();
+  const [formData, setFormData] = useState({
+    email: "",
+    phoneNumber: "",
+    password: "",
+    remember: false,
+  });
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value, type, checked } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: type === "checkbox" ? checked : value,
+    }));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    const res = await signIn("credentials", {
-      redirect: false,
-      email,
-      password,
-    });
 
-    if (res?.error) {
-      setError("Invalid username or password");
-    } else {
-      router.push("/dashboard"); // redirect after login
+    const username = loginMethod === "email" 
+      ? formData.email 
+      : `+855${formData.phoneNumber.replace(/\s/g, '')}`;
+
+    try {
+      const result = await signIn("credentials", {
+        username,
+        password: formData.password,
+        redirect: false,
+      });
+
+      if (result?.error) {
+        toast.error("Login failed", {
+          description: `Invalid ${loginMethod === "email" ? "email" : "phone number"} or password`,
+        });
+      } else if (result?.ok) {
+        toast.success("Welcome back!", {
+          description: "Redirecting to dashboard...",
+        });
+        router.push("/dashboard");
+        router.refresh();
+      }
+    } catch {
+      toast.error("Something went wrong", {
+        description: "Please check your connection and try again",
+      });
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   return (
@@ -54,6 +87,40 @@ export default function LoginPage() {
           Enter your credentials to access your account
         </motion.p>
       </div>
+
+      {/* Login Method Toggle */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.18 }}
+        className="flex p-1 rounded-xl bg-muted border border-border"
+      >
+        <button
+          type="button"
+          onClick={() => setLoginMethod("email")}
+          className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all ${
+            loginMethod === "email"
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <Mail className="w-4 h-4" />
+          Email
+        </button>
+        <button
+          type="button"
+          onClick={() => setLoginMethod("phone")}
+          className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all ${
+            loginMethod === "phone"
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <Phone className="w-4 h-4" />
+          Phone
+        </button>
+      </motion.div>
+
       {/* Form */}
       <motion.form
         initial={{ opacity: 0, y: 10 }}
@@ -62,22 +129,45 @@ export default function LoginPage() {
         onSubmit={handleSubmit}
         className="space-y-4"
       >
-        {/* Email */}
+        {/* Email or Phone */}
         <div className="space-y-2">
-          <label htmlFor="email" className="text-sm font-medium">
-            Email
+          <label htmlFor={loginMethod} className="text-sm font-medium">
+            {loginMethod === "email" ? "Email" : "Phone number"}
           </label>
-          <div className="relative">
-            <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-            <input
-              id="email"
-              type="email"
-              placeholder="name@company.com"
-              className="w-full h-12 pl-12 pr-4 rounded-xl bg-muted border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent-blue focus:ring-1 focus:ring-accent-blue transition-all"
-              required
-              value={email}
-            />
-          </div>
+          {loginMethod === "email" ? (
+            <div className="relative">
+              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+              <input
+                id="email"
+                name="email"
+                type="email"
+                value={formData.email}
+                onChange={handleChange}
+                placeholder="name@example.com"
+                className="w-full h-12 pl-12 pr-4 rounded-xl bg-muted border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent-blue focus:ring-1 focus:ring-accent-blue transition-all"
+                required
+                disabled={isLoading}
+              />
+            </div>
+          ) : (
+            <div className="flex">
+              <div className="flex items-center gap-1.5 px-3 h-12 rounded-l-xl bg-muted/80 border border-r-0 border-border text-muted-foreground text-sm font-medium">
+                <span className="text-base">🇰🇭</span>
+                <span>+855</span>
+              </div>
+              <input
+                id="phoneNumber"
+                name="phoneNumber"
+                type="tel"
+                value={formData.phoneNumber}
+                onChange={handleChange}
+                placeholder="12 345 678"
+                className="flex-1 h-12 pl-3 pr-4 rounded-r-xl bg-muted border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent-blue focus:ring-1 focus:ring-accent-blue transition-all"
+                required
+                disabled={isLoading}
+              />
+            </div>
+          )}
         </div>
 
         {/* Password */}
@@ -97,16 +187,20 @@ export default function LoginPage() {
             <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
             <input
               id="password"
+              name="password"
               type={showPassword ? "text" : "password"}
+              value={formData.password}
+              onChange={handleChange}
               placeholder="••••••••"
               className="w-full h-12 pl-12 pr-12 rounded-xl bg-muted border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent-blue focus:ring-1 focus:ring-accent-blue transition-all"
               required
-              value={password}
+              disabled={isLoading}
             />
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
               className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+              tabIndex={-1}
             >
               {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
             </button>
@@ -117,8 +211,12 @@ export default function LoginPage() {
         <div className="flex items-center gap-2">
           <input
             id="remember"
+            name="remember"
             type="checkbox"
+            checked={formData.remember}
+            onChange={handleChange}
             className="w-4 h-4 rounded border-border bg-muted text-accent-blue focus:ring-accent-blue focus:ring-offset-0"
+            disabled={isLoading}
           />
           <label htmlFor="remember" className="text-sm text-muted-foreground">
             Remember me for 30 days

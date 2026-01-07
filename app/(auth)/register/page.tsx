@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { Eye, EyeOff, Mail, Lock, User, Phone, ArrowRight, Check, Home, Key } from "lucide-react";
+import { Eye, EyeOff, Mail, Lock, User, ArrowRight, Check, Home, Key } from "lucide-react";
 import { registerAction } from "@/actions/auth/registerAction";
+import { toast } from "sonner";
 
 export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
@@ -17,6 +19,7 @@ export default function RegisterPage() {
     password: "",
     role: "",
   });
+  const router = useRouter()
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -27,14 +30,58 @@ export default function RegisterPage() {
     e.preventDefault();
     
     setIsLoading(true);
+
+    // Validate role is selected
+    if (!formData.role) {
+      toast.error("Please select a role", {
+        description: "Choose whether you are a Renter or House Owner",
+      });
+      setIsLoading(false);
+      return;
+    }
+
     try {
-        const res = await registerAction(
-            formData
-        )
-    } catch (error) {
-        
+      // Prepend +855 to phone number
+      const requestData = {
+        ...formData,
+        phoneNumber: `+855${formData.phoneNumber.replace(/^0+/, "")}`,
+      };
+
+      const res = await registerAction(requestData);
+
+      if (res.success) {
+        toast.success("Account created successfully!", {
+          description: "Redirecting to login...",
+        });
+        setTimeout(() => router.push("/login"), 1500);
+      } else {
+        // Show appropriate error message
+        toast.error(res.error || "Registration failed", {
+          description: getErrorDescription(res.error),
+        });
+      }
+    } catch {
+      toast.error("Something went wrong", {
+        description: "Please check your connection and try again",
+      });
     }
     setIsLoading(false);
+  };
+
+  // Get user-friendly error description
+  const getErrorDescription = (error?: string): string => {
+    if (!error) return "Please try again";
+    const lowerError = error.toLowerCase();
+    if (lowerError.includes("email already exists")) {
+      return "This email is already registered. Try logging in instead.";
+    }
+    if (lowerError.includes("phone")) {
+      return "This phone number is already in use.";
+    }
+    if (lowerError.includes("password")) {
+      return "Please use a stronger password.";
+    }
+    return "Please check your information and try again.";
   };
 
   // Password strength checks
@@ -100,16 +147,20 @@ export default function RegisterPage() {
           <label htmlFor="phoneNumber" className="text-sm font-medium">
             Phone number
           </label>
-          <div className="relative">
-            <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+          <div className="flex">
+            {/* Cambodia prefix */}
+            <div className="flex items-center gap-1.5 h-12 px-3 rounded-l-xl bg-muted border border-r-0 border-border text-muted-foreground">
+              <span className="text-base">🇰🇭</span>
+              <span className="text-sm font-medium">+855</span>
+            </div>
             <input
               id="phoneNumber"
               name="phoneNumber"
               type="tel"
               value={formData.phoneNumber}
               onChange={handleChange}
-              placeholder="+1 (555) 000-0000"
-              className="w-full h-12 pl-12 pr-4 rounded-xl bg-muted border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent-blue focus:ring-1 focus:ring-accent-blue transition-all"
+              placeholder="12 345 678"
+              className="flex-1 h-12 px-4 rounded-r-xl bg-muted border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent-blue focus:ring-1 focus:ring-accent-blue transition-all"
               required
               disabled={isLoading}
             />
