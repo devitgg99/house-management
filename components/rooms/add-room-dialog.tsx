@@ -83,7 +83,7 @@ export function AddRoomDialog({
           uploadedUrls.push(result.url);
         } else {
           toast.error("Upload failed", {
-            description: result.message || `Failed to upload ${file.name}`,
+            description: result.error || `Failed to upload ${file.name}`,
           });
         }
       }
