@@ -27,6 +27,7 @@ import { GetHouseByIdAction } from "@/actions/property/PropertyAction";
 import { GetRoomsByFloorAction } from "@/actions/room/RoomAction";
 import { GetUtilitiesByHouseAction, UpdateUtilityPaymentAction } from "@/actions/utility/UtilityAction";
 import { HouseDetailResponse, RoomResponse, UtilityResponse } from "@/types/property";
+import { useLanguage } from "@/contexts/language-context";
 import { AddFloorDialog } from "@/components/floors/add-floor-dialog";
 import { AddRoomDialog } from "@/components/rooms/add-room-dialog";
 import { EditRoomDialog } from "@/components/rooms/edit-room-dialog";
@@ -38,6 +39,7 @@ export default function PropertyDetailPage() {
   const params = useParams();
   const router = useRouter();
   const houseId = params.id as string;
+  const { language, t } = useLanguage();
 
   const [house, setHouse] = useState<HouseDetailResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -59,7 +61,12 @@ export default function PropertyDetailPage() {
   const [isTogglingPayment, setIsTogglingPayment] = useState<string | null>(null);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [availableMonths, setAvailableMonths] = useState<string[]>([]);
-  const [exportLang, setExportLang] = useState<"en" | "kh">("en");
+  const [exportLang, setExportLang] = useState<"en" | "kh">(language);
+
+  // Sync export language with global language when it changes
+  useEffect(() => {
+    setExportLang(language);
+  }, [language]);
 
   const fetchHouseDetail = useCallback(async () => {
     if (!session?.user?.token || !houseId) return;

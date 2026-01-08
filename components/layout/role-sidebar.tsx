@@ -5,6 +5,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "@/contexts/language-context";
+import LanguageSwitcher, { LanguageSwitcherCompact } from "@/components/language-switcher";
 import {
   LayoutDashboard,
   Building2,
@@ -72,9 +74,20 @@ export default function RoleSidebar() {
   const pathname = usePathname();
   const { data: session } = useSession();
   const [isOpen, setIsOpen] = useState(false);
+  const { t } = useLanguage();
 
   const role = (session?.user?.role as UserRole) || "RENTER";
   const config = navConfig[role];
+  
+  // Get translated title based on role
+  const getTitle = () => {
+    switch (role) {
+      case "ADMIN": return t.adminPanel;
+      case "HOUSEOWNER": return t.ownerPortal;
+      case "RENTER": return t.renterPortal;
+      default: return config.title;
+    }
+  };
 
   // Close sidebar on route change
   useEffect(() => {
@@ -104,7 +117,7 @@ export default function RoleSidebar() {
           <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
             <span className="text-primary-foreground font-bold text-sm">H</span>
           </div>
-          <span className="font-semibold text-lg">{config.title}</span>
+          <span className="font-semibold text-lg">{getTitle()}</span>
         </Link>
         {/* Close button - mobile only */}
         <button
@@ -143,6 +156,9 @@ export default function RoleSidebar() {
 
       {/* User & Settings */}
       <div className="p-4 border-t border-border space-y-1">
+        {/* Language Switcher */}
+        <LanguageSwitcher />
+        
         <Link
           href={`${config.baseUrl}/settings`}
           className={cn(
@@ -153,14 +169,14 @@ export default function RoleSidebar() {
           )}
         >
           <Settings className="w-5 h-5" />
-          Settings
+          {t.settings}
         </Link>
         <button
           onClick={() => signOut({ callbackUrl: "/login" })}
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
         >
           <LogOut className="w-5 h-5" />
-          Sign out
+          {t.signOut}
         </button>
       </div>
 
@@ -196,15 +212,18 @@ export default function RoleSidebar() {
           <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
             <span className="text-primary-foreground font-bold text-sm">H</span>
           </div>
-          <span className="font-semibold text-lg">{config.title}</span>
+          <span className="font-semibold text-lg">{getTitle()}</span>
         </Link>
-        <button
-          onClick={() => setIsOpen(true)}
-          className="p-2 -mr-2 text-muted-foreground hover:text-foreground"
-          aria-label="Open menu"
-        >
-          <Menu className="w-6 h-6" />
-        </button>
+        <div className="flex items-center gap-1">
+          <LanguageSwitcherCompact />
+          <button
+            onClick={() => setIsOpen(true)}
+            className="p-2 -mr-2 text-muted-foreground hover:text-foreground"
+            aria-label="Open menu"
+          >
+            <Menu className="w-6 h-6" />
+          </button>
+        </div>
       </div>
 
       {/* Mobile Overlay */}
