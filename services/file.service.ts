@@ -7,18 +7,12 @@ export type FileUploadResponse = {
   data?: any;
 };
 
-export const UploadFileService = async (file: File): Promise<FileUploadResponse> => {
+export const UploadFileService = async (formData: FormData): Promise<FileUploadResponse> => {
   try {
-    console.log("📤 Uploading file:", file.name, file.type, file.size);
-
-    const formData = new FormData();
-    formData.append("file", file);
+    console.log("📤 Uploading file...");
 
     const res = await fetch(`${API_BASE_URL}/file/upload`, {
       method: "POST",
-      headers: {
-        "Accept": "*/*",
-      },
       body: formData,
     });
 
@@ -45,4 +39,3 @@ export const UploadFileService = async (file: File): Promise<FileUploadResponse>
     };
   }
 };
-
