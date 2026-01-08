@@ -44,12 +44,13 @@ export const GetUtilitiesByHouseService = async (
 export const ExportUtilityPdfService = async (
   houseId: string,
   month: string,
-  token: string
+  token: string,
+  lang: "en" | "kh" = "en"
 ) => {
   try {
-    console.log("📤 Exporting utility PDF for house:", houseId, "month:", month);
+    console.log("📤 Exporting utility PDF for house:", houseId, "month:", month, "lang:", lang);
     
-    const res = await fetch(`${API_BASE_URL}/utility/house/${houseId}/pdf?month=${month}`, {
+    const res = await fetch(`${API_BASE_URL}/utility/house/${houseId}/pdf?month=${month}&lang=${lang}`, {
       method: "GET",
       headers: {
         "Authorization": `Bearer ${token}`,

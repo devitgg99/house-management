@@ -59,6 +59,7 @@ export default function PropertyDetailPage() {
   const [isTogglingPayment, setIsTogglingPayment] = useState<string | null>(null);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [availableMonths, setAvailableMonths] = useState<string[]>([]);
+  const [exportLang, setExportLang] = useState<"en" | "kh">("en");
 
   const fetchHouseDetail = useCallback(async () => {
     if (!session?.user?.token || !houseId) return;
@@ -197,7 +198,7 @@ export default function PropertyDetailPage() {
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL;
       const response = await fetch(
-        `${apiUrl}/utility/house/${houseId}/pdf?month=${selectedReportMonth}`,
+        `${apiUrl}/utility/house/${houseId}/pdf?month=${selectedReportMonth}&lang=${exportLang}`,
         {
           method: "GET",
           headers: {
@@ -215,7 +216,7 @@ export default function PropertyDetailPage() {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `utility-report-${house?.houseName || houseId}-${selectedReportMonth}.pdf`;
+      link.download = `utility-report-${house?.houseName || houseId}-${selectedReportMonth}-${exportLang}.pdf`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -543,20 +544,31 @@ export default function PropertyDetailPage() {
             Utility Report
           </h2>
           {selectedReportMonth && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleExportPdf}
-              disabled={isExportingPdf}
-              className="gap-2"
-            >
-              {isExportingPdf ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <FileDown className="w-4 h-4" />
-              )}
-              Export PDF
-            </Button>
+            <div className="flex items-center gap-2">
+              {/* Language Selector */}
+              <select
+                value={exportLang}
+                onChange={(e) => setExportLang(e.target.value as "en" | "kh")}
+                className="h-9 px-3 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="en">🇺🇸 English</option>
+                <option value="kh">🇰🇭 ខ្មែរ</option>
+              </select>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleExportPdf}
+                disabled={isExportingPdf}
+                className="gap-2"
+              >
+                {isExportingPdf ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <FileDown className="w-4 h-4" />
+                )}
+                Export PDF
+              </Button>
+            </div>
           )}
         </div>
 

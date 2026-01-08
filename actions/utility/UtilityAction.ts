@@ -5,6 +5,7 @@ import {
   GetUtilitiesByRoomService, 
   AddUtilityService,
   UpdateUtilityPaymentService,
+  ExportUtilityPdfService,
 } from "@/services/utility.service";
 import { UtilityRequest } from "@/types/property";
 
@@ -33,5 +34,15 @@ export const UpdateUtilityPaymentAction = async (
   token: string
 ) => {
   const response = await UpdateUtilityPaymentService(utilityId, isPay, token);
+  return response;
+};
+
+export const ExportUtilityPdfAction = async (
+  houseId: string,
+  month: string,
+  token: string,
+  lang: "en" | "kh" = "en"
+) => {
+  const response = await ExportUtilityPdfService(houseId, month, token, lang);
   return response;
 };
