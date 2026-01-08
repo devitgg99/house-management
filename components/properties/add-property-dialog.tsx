@@ -66,7 +66,9 @@ export function AddPropertyDialog({
     setIsUploading(true);
 
     try {
-      const result = await UploadFileService(file);
+      const formData = new FormData();
+      formData.append("file", file);
+      const result = await UploadFileService(formData);
 
       if (result.success && result.url) {
         setFormData((prev) => ({ ...prev, houseImage: result.url! }));
