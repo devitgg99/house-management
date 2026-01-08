@@ -1,3 +1,4 @@
+"use server";
 
 import { RegisterService } from "@/services/auth.service";
 import { RegisterRequest } from "@/types/auth/Register";
