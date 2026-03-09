@@ -89,6 +89,15 @@ export default function RoomDetailPage() {
     }
   }, [session?.user?.token, roomId]);
 
+  // Helper to get the most recent month from utilities
+  const getMostRecentMonth = (utilityList: UtilityResponse[]) => {
+    if (utilityList.length === 0) return null;
+    const sorted = [...utilityList].sort(
+      (a, b) => new Date(b.month).getTime() - new Date(a.month).getTime()
+    );
+    return sorted[0].month;
+  };
+
   const fetchUtilities = useCallback(async (forceRefresh = false) => {
     if (!session?.user?.token || !roomId) return;
 
@@ -98,7 +107,9 @@ export default function RoomDetailPage() {
       if (cachedUtilities) {
         setUtilities(cachedUtilities);
         if (cachedUtilities.length > 0 && !selectedMonth) {
-          setSelectedMonth(cachedUtilities[0].month);
+          // Select the most recent month by default
+          const recentMonth = getMostRecentMonth(cachedUtilities);
+          if (recentMonth) setSelectedMonth(recentMonth);
         }
         return;
       }
@@ -113,7 +124,9 @@ export default function RoomDetailPage() {
         setUtilities(utilityData);
         setUtilitiesByRoom(roomId, utilityData);
         if (utilityData.length > 0 && !selectedMonth) {
-          setSelectedMonth(utilityData[0].month);
+          // Select the most recent month by default
+          const recentMonth = getMostRecentMonth(utilityData);
+          if (recentMonth) setSelectedMonth(recentMonth);
         }
       } else {
         toast.error("Failed to load utilities", {
@@ -209,16 +222,19 @@ export default function RoomDetailPage() {
     );
   };
 
-  // Get unique months from utilities
-  const uniqueMonths = [...new Set(utilities.map((u) => u.month))].sort(
-    (a, b) => new Date(b).getTime() - new Date(a).getTime()
+  // Sort utilities by date (most recent first)
+  const sortedUtilities = [...utilities].sort(
+    (a, b) => new Date(b.month).getTime() - new Date(a.month).getTime()
   );
 
-  // Get selected utility
-  const selectedUtility = utilities.find((u) => u.month === selectedMonth);
+  // Get unique months from utilities
+  const uniqueMonths = [...new Set(sortedUtilities.map((u) => u.month))];
 
-  // Get last water reading for new utility form
-  const lastWaterReading = utilities.length > 0 ? utilities[0].newWater : 0;
+  // Get selected utility
+  const selectedUtility = sortedUtilities.find((u) => u.month === selectedMonth);
+
+  // Get last water reading for new utility form (always use the most recent)
+  const lastWaterReading = sortedUtilities.length > 0 ? sortedUtilities[0].newWater : 0;
 
   const formatMonth = (dateStr: string) => {
     const date = new Date(dateStr);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Droplets, Loader2, Calendar } from "lucide-react";
@@ -34,6 +34,18 @@ export function AddUtilityDialog({
     newWater: "",
     month: new Date().toISOString().split("T")[0],
   });
+
+  // Sync oldWater with lastReading prop when it changes or dialog opens
+  useEffect(() => {
+    if (isOpen) {
+      setFormData((prev) => ({
+        ...prev,
+        oldWater: lastReading.toString(),
+        newWater: "",
+        month: new Date().toISOString().split("T")[0],
+      }));
+    }
+  }, [isOpen, lastReading]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
