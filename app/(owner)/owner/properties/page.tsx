@@ -17,6 +17,7 @@ import {
 } from "@/components/properties";
 import { GetPropertiesAction } from "@/actions/property/PropertyAction";
 import { PropertyResponse, ViewMode } from "@/types/property";
+import { usePropertyStore } from "@/stores/property-store";
 import { toast } from "sonner";
 
 export default function PropertiesPage() {
@@ -30,8 +31,25 @@ export default function PropertiesPage() {
   const [properties, setProperties] = useState<PropertyResponse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const fetchProperties = useCallback(async () => {
+  // Zustand store
+  const {
+    getProperties,
+    setProperties: setCachedProperties,
+    invalidateProperties,
+  } = usePropertyStore();
+
+  const fetchProperties = useCallback(async (forceRefresh = false) => {
     if (!session?.user?.token) return;
+
+    // Check cache first (unless forced refresh)
+    if (!forceRefresh) {
+      const cachedProperties = getProperties();
+      if (cachedProperties) {
+        setProperties(cachedProperties);
+        setIsLoading(false);
+        return;
+      }
+    }
 
     setIsLoading(true);
     try {
@@ -39,6 +57,7 @@ export default function PropertiesPage() {
       
       if (result.success) {
         setProperties(result.data);
+        setCachedProperties(result.data);
       } else {
         toast.error("Failed to load properties", {
           description: result.message,
@@ -51,7 +70,7 @@ export default function PropertiesPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [session?.user?.token]);
+  }, [session?.user?.token, getProperties, setCachedProperties]);
 
   useEffect(() => {
     fetchProperties();
@@ -67,15 +86,18 @@ export default function PropertiesPage() {
   const totalRooms = properties.reduce((sum, p) => sum + (p.totalRooms || 0), 0);
 
   const handlePropertyAdded = () => {
-    fetchProperties();
+    invalidateProperties();
+    fetchProperties(true);
   };
 
   const handlePropertyUpdated = () => {
-    fetchProperties();
+    invalidateProperties();
+    fetchProperties(true);
   };
 
   const handlePropertyDeleted = () => {
-    fetchProperties();
+    invalidateProperties();
+    fetchProperties(true);
   };
 
   const handleEditProperty = (property: PropertyResponse) => {

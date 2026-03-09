@@ -29,6 +29,7 @@ import { toast } from "sonner";
 import { GetRoomByIdAction } from "@/actions/room/RoomAction";
 import { GetUtilitiesByRoomAction, UpdateUtilityPaymentAction } from "@/actions/utility/UtilityAction";
 import { RoomResponse, UtilityResponse } from "@/types/property";
+import { usePropertyStore } from "@/stores/property-store";
 import { EditRoomDialog } from "@/components/rooms/edit-room-dialog";
 import { DeleteRoomDialog } from "@/components/rooms/delete-room-dialog";
 import { AddUtilityDialog } from "@/components/utilities/add-utility-dialog";
@@ -40,6 +41,16 @@ export default function RoomDetailPage() {
   const router = useRouter();
   const houseId = params.id as string;
   const roomId = params.roomId as string;
+
+  // Zustand store
+  const {
+    getUtilitiesByRoom,
+    setUtilitiesByRoom,
+    invalidateUtilitiesByRoom,
+    invalidateRoomsByFloor,
+    setActiveFloor,
+    invalidateUtilitiesByHouse,
+  } = usePropertyStore();
 
   const [room, setRoom] = useState<RoomResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -78,8 +89,20 @@ export default function RoomDetailPage() {
     }
   }, [session?.user?.token, roomId]);
 
-  const fetchUtilities = useCallback(async () => {
+  const fetchUtilities = useCallback(async (forceRefresh = false) => {
     if (!session?.user?.token || !roomId) return;
+
+    // Check cache first (unless forced refresh)
+    if (!forceRefresh) {
+      const cachedUtilities = getUtilitiesByRoom(roomId);
+      if (cachedUtilities) {
+        setUtilities(cachedUtilities);
+        if (cachedUtilities.length > 0 && !selectedMonth) {
+          setSelectedMonth(cachedUtilities[0].month);
+        }
+        return;
+      }
+    }
 
     setIsLoadingUtilities(true);
     try {
@@ -88,7 +111,7 @@ export default function RoomDetailPage() {
       if (result.success) {
         const utilityData = result.data || [];
         setUtilities(utilityData);
-        // Select the most recent month by default
+        setUtilitiesByRoom(roomId, utilityData);
         if (utilityData.length > 0 && !selectedMonth) {
           setSelectedMonth(utilityData[0].month);
         }
@@ -104,7 +127,7 @@ export default function RoomDetailPage() {
     } finally {
       setIsLoadingUtilities(false);
     }
-  }, [session?.user?.token, roomId, selectedMonth]);
+  }, [session?.user?.token, roomId, selectedMonth, getUtilitiesByRoom, setUtilitiesByRoom]);
 
   useEffect(() => {
     fetchRoomDetail();
@@ -117,16 +140,34 @@ export default function RoomDetailPage() {
   }, [room, fetchUtilities]);
 
   const handleRoomUpdated = () => {
+    if (room?.floorId) {
+      invalidateRoomsByFloor(room.floorId);
+    }
     fetchRoomDetail();
   };
 
   const handleRoomDeleted = () => {
+    if (room?.floorId) {
+      invalidateRoomsByFloor(room.floorId);
+      // Ensure we navigate back to the same floor
+      setActiveFloor(houseId, room.floorId);
+    }
     router.push(`/owner/properties/${houseId}`);
   };
 
   const handleUtilityAdded = () => {
-    fetchUtilities();
+    invalidateUtilitiesByRoom(roomId);
+    invalidateUtilitiesByHouse(houseId);
+    fetchUtilities(true);
   };
+
+  // Navigate back to house detail, preserving the floor
+  const handleNavigateBack = useCallback(() => {
+    if (room?.floorId) {
+      setActiveFloor(houseId, room.floorId);
+    }
+    router.push(`/owner/properties/${houseId}`);
+  }, [room?.floorId, houseId, setActiveFloor, router]);
 
   const handleTogglePayment = async (utilityId: string, currentStatus: boolean) => {
     if (!session?.user?.token) return;
@@ -137,7 +178,9 @@ export default function RoomDetailPage() {
       
       if (result.success) {
         toast.success(currentStatus ? "Marked as unpaid" : "Marked as paid");
-        fetchUtilities();
+        invalidateUtilitiesByRoom(roomId);
+        invalidateUtilitiesByHouse(houseId);
+        fetchUtilities(true);
       } else {
         toast.error("Failed to update", {
           description: result.error,
@@ -213,7 +256,7 @@ export default function RoomDetailPage() {
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => router.push(`/owner/properties/${houseId}`)}
+          onClick={handleNavigateBack}
           className="shrink-0"
         >
           <ArrowLeft className="w-5 h-5" />
@@ -451,7 +494,7 @@ export default function RoomDetailPage() {
           <div className="p-4 bg-card rounded-xl border border-border">
             <h3 className="font-semibold mb-3">Property</h3>
             <button
-              onClick={() => router.push(`/owner/properties/${houseId}`)}
+              onClick={handleNavigateBack}
               className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-colors"
             >
               <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import { useParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
@@ -28,6 +28,7 @@ import { GetRoomsByFloorAction } from "@/actions/room/RoomAction";
 import { GetUtilitiesByHouseAction, UpdateUtilityPaymentAction } from "@/actions/utility/UtilityAction";
 import { HouseDetailResponse, RoomResponse, UtilityResponse } from "@/types/property";
 import { useLanguage } from "@/contexts/language-context";
+import { usePropertyStore } from "@/stores/property-store";
 import { AddFloorDialog } from "@/components/floors/add-floor-dialog";
 import { AddRoomDialog } from "@/components/rooms/add-room-dialog";
 import { EditRoomDialog } from "@/components/rooms/edit-room-dialog";
@@ -40,6 +41,19 @@ export default function PropertyDetailPage() {
   const router = useRouter();
   const houseId = params.id as string;
   const { language, t } = useLanguage();
+
+  // Zustand store
+  const {
+    getHouseDetails,
+    setHouseDetails,
+    getRoomsByFloor,
+    setRoomsByFloor,
+    getActiveFloor,
+    setActiveFloor,
+    invalidateHouseDetails,
+    invalidateRoomsByFloor,
+    invalidateUtilitiesByHouse,
+  } = usePropertyStore();
 
   const [house, setHouse] = useState<HouseDetailResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -68,8 +82,24 @@ export default function PropertyDetailPage() {
     setExportLang(language);
   }, [language]);
 
-  const fetchHouseDetail = useCallback(async () => {
+  const fetchHouseDetail = useCallback(async (forceRefresh = false) => {
     if (!session?.user?.token || !houseId) return;
+
+    // Check cache first (unless forced refresh)
+    if (!forceRefresh) {
+      const cachedHouse = getHouseDetails(houseId);
+      if (cachedHouse) {
+        setHouse(cachedHouse);
+        // Use stored active floor or first floor
+        const storedFloorId = getActiveFloor(houseId);
+        const validFloorId = cachedHouse.floors?.find(f => f.floorId === storedFloorId)
+          ? storedFloorId
+          : cachedHouse.floors?.[0]?.floorId || null;
+        setActiveFloorId(validFloorId);
+        setIsLoading(false);
+        return;
+      }
+    }
 
     setIsLoading(true);
     try {
@@ -77,10 +107,14 @@ export default function PropertyDetailPage() {
 
       if (result.success && result.data) {
         setHouse(result.data);
-        // Set first floor as active if available
-        if (result.data.floors?.length > 0 && !activeFloorId) {
-          setActiveFloorId(result.data.floors[0].floorId);
-        }
+        setHouseDetails(houseId, result.data);
+        
+        // Use stored active floor or first floor
+        const storedFloorId = getActiveFloor(houseId);
+        const validFloorId = result.data.floors?.find(f => f.floorId === storedFloorId)
+          ? storedFloorId
+          : result.data.floors?.[0]?.floorId || null;
+        setActiveFloorId(validFloorId);
       } else {
         toast.error("Failed to load property", {
           description: result.error,
@@ -93,17 +127,28 @@ export default function PropertyDetailPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [session?.user?.token, houseId, activeFloorId]);
+  }, [session?.user?.token, houseId, getHouseDetails, getActiveFloor, setHouseDetails]);
 
-  const fetchRoomsByFloor = useCallback(async (floorId: string) => {
+  const fetchRoomsByFloor = useCallback(async (floorId: string, forceRefresh = false) => {
     if (!session?.user?.token) return;
+
+    // Check cache first (unless forced refresh)
+    if (!forceRefresh) {
+      const cachedRooms = getRoomsByFloor(floorId);
+      if (cachedRooms) {
+        setRooms(cachedRooms);
+        return;
+      }
+    }
 
     setIsLoadingRooms(true);
     try {
       const result = await GetRoomsByFloorAction(floorId, session.user.token);
 
       if (result.success) {
-        setRooms(result.data || []);
+        const roomsData = result.data || [];
+        setRooms(roomsData);
+        setRoomsByFloor(floorId, roomsData);
       } else {
         toast.error("Failed to load rooms", {
           description: result.error,
@@ -118,7 +163,7 @@ export default function PropertyDetailPage() {
     } finally {
       setIsLoadingRooms(false);
     }
-  }, [session?.user?.token]);
+  }, [session?.user?.token, getRoomsByFloor, setRoomsByFloor]);
 
   // Fetch all utilities first to get available months
   const fetchAvailableMonths = useCallback(async () => {
@@ -261,28 +306,40 @@ export default function PropertyDetailPage() {
     }
   }, [house, selectedReportMonth, fetchUtilities]);
 
+  // Handle floor tab change - persist to store
+  const handleFloorChange = useCallback((floorId: string) => {
+    setActiveFloorId(floorId);
+    setActiveFloor(houseId, floorId);
+  }, [houseId, setActiveFloor]);
+
   const handleFloorAdded = () => {
-    fetchHouseDetail();
+    invalidateHouseDetails(houseId);
+    fetchHouseDetail(true);
   };
 
   const handleRoomAdded = () => {
     if (activeFloorId) {
-      fetchRoomsByFloor(activeFloorId);
+      invalidateRoomsByFloor(activeFloorId);
+      fetchRoomsByFloor(activeFloorId, true);
     }
-    fetchHouseDetail();
+    invalidateHouseDetails(houseId);
+    fetchHouseDetail(true);
   };
 
   const handleRoomUpdated = () => {
     if (activeFloorId) {
-      fetchRoomsByFloor(activeFloorId);
+      invalidateRoomsByFloor(activeFloorId);
+      fetchRoomsByFloor(activeFloorId, true);
     }
   };
 
   const handleRoomDeleted = () => {
     if (activeFloorId) {
-      fetchRoomsByFloor(activeFloorId);
+      invalidateRoomsByFloor(activeFloorId);
+      fetchRoomsByFloor(activeFloorId, true);
     }
-    fetchHouseDetail();
+    invalidateHouseDetails(houseId);
+    fetchHouseDetail(true);
   };
 
   const handleEditRoom = (room: RoomResponse) => {
@@ -444,7 +501,7 @@ export default function PropertyDetailPage() {
               {house.floors.map((floor) => (
                 <button
                   key={floor.floorId}
-                  onClick={() => setActiveFloorId(floor.floorId)}
+                  onClick={() => handleFloorChange(floor.floorId)}
                   className={`px-4 py-2.5 rounded-xl text-sm font-medium whitespace-nowrap transition-all ${
                     activeFloorId === floor.floorId
                       ? "bg-primary text-primary-foreground"
