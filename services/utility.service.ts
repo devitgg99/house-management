@@ -183,3 +183,75 @@ export const UpdateUtilityPaymentService = async (
   }
 };
 
+// Update utility (correct old/new water readings)
+export const UpdateUtilityService = async (
+  utilityId: string,
+  oldWater: number,
+  newWater: number,
+  token: string
+) => {
+  try {
+    console.log("📤 Updating utility:", utilityId, { oldWater, newWater });
+    
+    const res = await fetch(`${API_BASE_URL}/utility/${utilityId}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`,
+      },
+      body: JSON.stringify({ oldWater, newWater }),
+    });
+
+    const data = await res.json();
+    console.log("📥 Update utility response:", res.status, data);
+
+    if (!res.ok) {
+      return {
+        success: false,
+        error: data.message || data.error || "Failed to update utility",
+      };
+    }
+
+    return { success: true, ...data };
+  } catch (e) {
+    console.error("❌ Update utility error:", e);
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Network error or server is unreachable",
+    };
+  }
+};
+
+// Delete utility record
+export const DeleteUtilityService = async (utilityId: string, token: string) => {
+  try {
+    console.log("📤 Deleting utility:", utilityId);
+    
+    const res = await fetch(`${API_BASE_URL}/utility/${utilityId}`, {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`,
+      },
+    });
+
+    const data = await res.json();
+    console.log("📥 Delete utility response:", res.status, data);
+
+    if (!res.ok) {
+      return {
+        success: false,
+        error: data.message || data.error || "Failed to delete utility",
+      };
+    }
+
+    return { success: true, ...data };
+  } catch (e) {
+    console.error("❌ Delete utility error:", e);
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Network error or server is unreachable",
+    };
+  }
+};
+

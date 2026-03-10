@@ -33,6 +33,8 @@ import { usePropertyStore } from "@/stores/property-store";
 import { EditRoomDialog } from "@/components/rooms/edit-room-dialog";
 import { DeleteRoomDialog } from "@/components/rooms/delete-room-dialog";
 import { AddUtilityDialog } from "@/components/utilities/add-utility-dialog";
+import { EditUtilityDialog } from "@/components/utilities/edit-utility-dialog";
+import { DeleteUtilityDialog } from "@/components/utilities/delete-utility-dialog";
 import { AssignRenterDialog } from "@/components/rooms/assign-renter-dialog";
 
 export default function RoomDetailPage() {
@@ -65,6 +67,11 @@ export default function RoomDetailPage() {
   const [isLoadingUtilities, setIsLoadingUtilities] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
   const [isTogglingPayment, setIsTogglingPayment] = useState(false);
+  
+  // Utility edit/delete state
+  const [isEditUtilityDialogOpen, setIsEditUtilityDialogOpen] = useState(false);
+  const [isDeleteUtilityDialogOpen, setIsDeleteUtilityDialogOpen] = useState(false);
+  const [selectedUtilityForAction, setSelectedUtilityForAction] = useState<UtilityResponse | null>(null);
 
   const fetchRoomDetail = useCallback(async () => {
     if (!session?.user?.token || !roomId) return;
@@ -172,6 +179,29 @@ export default function RoomDetailPage() {
     invalidateUtilitiesByRoom(roomId);
     invalidateUtilitiesByHouse(houseId);
     fetchUtilities(true);
+  };
+
+  const handleEditUtility = (utility: UtilityResponse) => {
+    setSelectedUtilityForAction(utility);
+    setIsEditUtilityDialogOpen(true);
+  };
+
+  const handleDeleteUtility = (utility: UtilityResponse) => {
+    setSelectedUtilityForAction(utility);
+    setIsDeleteUtilityDialogOpen(true);
+  };
+
+  const handleUtilityUpdated = () => {
+    invalidateUtilitiesByRoom(roomId);
+    invalidateUtilitiesByHouse(houseId);
+    fetchUtilities(true);
+  };
+
+  const handleUtilityDeleted = () => {
+    invalidateUtilitiesByRoom(roomId);
+    invalidateUtilitiesByHouse(houseId);
+    fetchUtilities(true);
+    setSelectedMonth(null);
   };
 
   // Navigate back to house detail, preserving the floor
@@ -674,6 +704,28 @@ export default function RoomDetailPage() {
                     </div>
                   </div>
                 </div>
+
+                {/* Utility Actions */}
+                <div className="flex items-center gap-2 pt-4 border-t border-border">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleEditUtility(selectedUtility)}
+                    className="flex-1 gap-2"
+                  >
+                    <Edit className="w-4 h-4" />
+                    Edit Reading
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => handleDeleteUtility(selectedUtility)}
+                    className="flex-1 gap-2"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Delete
+                  </Button>
+                </div>
               </div>
             )}
           </div>
@@ -729,6 +781,28 @@ export default function RoomDetailPage() {
         onSuccess={handleRoomUpdated}
         roomId={roomId}
         roomName={room.roomName}
+      />
+
+      {/* Edit Utility Dialog */}
+      <EditUtilityDialog
+        isOpen={isEditUtilityDialogOpen}
+        onClose={() => {
+          setIsEditUtilityDialogOpen(false);
+          setSelectedUtilityForAction(null);
+        }}
+        onSuccess={handleUtilityUpdated}
+        utility={selectedUtilityForAction}
+      />
+
+      {/* Delete Utility Dialog */}
+      <DeleteUtilityDialog
+        isOpen={isDeleteUtilityDialogOpen}
+        onClose={() => {
+          setIsDeleteUtilityDialogOpen(false);
+          setSelectedUtilityForAction(null);
+        }}
+        onSuccess={handleUtilityDeleted}
+        utility={selectedUtilityForAction}
       />
     </div>
   );

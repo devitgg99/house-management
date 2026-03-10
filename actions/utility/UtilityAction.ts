@@ -5,6 +5,8 @@ import {
   GetUtilitiesByRoomService, 
   AddUtilityService,
   UpdateUtilityPaymentService,
+  UpdateUtilityService,
+  DeleteUtilityService,
   ExportUtilityPdfService,
 } from "@/services/utility.service";
 import { UtilityRequest } from "@/types/property";
@@ -44,5 +46,20 @@ export const ExportUtilityPdfAction = async (
   lang: "en" | "kh" = "en"
 ) => {
   const response = await ExportUtilityPdfService(houseId, month, token, lang);
+  return response;
+};
+
+export const UpdateUtilityAction = async (
+  utilityId: string,
+  oldWater: number,
+  newWater: number,
+  token: string
+) => {
+  const response = await UpdateUtilityService(utilityId, oldWater, newWater, token);
+  return response;
+};
+
+export const DeleteUtilityAction = async (utilityId: string, token: string) => {
+  const response = await DeleteUtilityService(utilityId, token);
   return response;
 };
