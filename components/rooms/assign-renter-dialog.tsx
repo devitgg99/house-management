@@ -24,6 +24,7 @@ import {
   AssignRenterToRoomAction,
 } from "@/actions/user/UserAction";
 import { UserResponse } from "@/types/property";
+import { browserLogger } from "@/lib/logger";
 
 type AssignRenterDialogProps = {
   isOpen: boolean;
@@ -58,11 +59,13 @@ export function AssignRenterDialog({
       if (result.success) {
         setRenters(result.data || []);
       } else {
+        browserLogger.error("Renter", "Failed to load renters", { error: result.error });
         toast.error("Failed to load renters", {
           description: result.error,
         });
       }
     } catch (error) {
+      browserLogger.error("Renter", "Exception fetching renters", error);
       toast.error("Error", {
         description: "Failed to fetch renters",
       });
@@ -92,9 +95,11 @@ export function AssignRenterDialog({
         toast.success(currentlyFollowing ? "Unfollowed" : "Following");
         fetchRenters();
       } else {
+        browserLogger.error("Renter", `Failed to ${currentlyFollowing ? "unfollow" : "follow"} user`, { userId, error: result.error });
         toast.error("Action failed", { description: result.error });
       }
     } catch (error) {
+      browserLogger.error("Renter", `Exception ${currentlyFollowing ? "unfollowing" : "following"} user`, { userId, error });
       toast.error("Error", { description: "Failed to update follow status" });
     } finally {
       setLoadingFollow(null);
@@ -113,15 +118,22 @@ export function AssignRenterDialog({
       );
 
       if (result.success) {
+        browserLogger.success("Renter", `Renter assigned to room ${roomName}`, { roomId, selectedRenter });
         toast.success("Renter assigned successfully");
-        onSuccess();
         onClose();
+        onSuccess();
       } else {
+        browserLogger.error("Renter", "Failed to assign renter to room", {
+          roomId,
+          selectedRenter,
+          error: result.error,
+        });
         toast.error("Failed to assign renter", {
           description: result.error,
         });
       }
     } catch (error) {
+      browserLogger.error("Renter", "Exception assigning renter to room", { roomId, selectedRenter, error });
       toast.error("Error", {
         description: "Failed to assign renter",
       });

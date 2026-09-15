@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { UpdateRoomAction } from "@/actions/room/RoomAction";
 import { UploadFileAction } from "@/actions/file/FileAction";
 import { RoomResponse } from "@/types/property";
+import { browserLogger } from "@/lib/logger";
 
 
 type EditRoomDialogProps = {
@@ -36,20 +37,27 @@ export function EditRoomDialog({
   const [images, setImages] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Initialize form when room changes
   useEffect(() => {
-    if (room) {
+    if (isOpen && room) {
       setFormData({
-        roomName: room.roomName,
-        price: room.price?.toString() || "0",
+        roomName: room.roomName || "",
+        price: room.price?.toString() || "",
       });
-      setImages(room.images?.filter((img) => img !== "string") || []);
+      // Filter out placeholder strings
+      const validImages = room.images?.filter((img) => img && img !== "string") || [];
+      setImages(validImages);
     }
-  }, [room]);
+  }, [isOpen, room]);
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
+
+    if (!session?.user?.token) {
+      browserLogger.warn("Room", "Authentication required to upload images for room edit");
+      toast.error("Please login to upload images");
+      return;
+    }
 
     const validTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
     const invalidFiles = Array.from(files).filter(
@@ -57,19 +65,9 @@ export function EditRoomDialog({
     );
 
     if (invalidFiles.length > 0) {
+      browserLogger.warn("Room", "Invalid image file type selected", { invalidFiles: invalidFiles.map(f => f.name) });
       toast.error("Invalid file type", {
-        description: "Please upload only image files (JPEG, PNG, GIF, WEBP)",
-      });
-      return;
-    }
-
-    const oversizedFiles = Array.from(files).filter(
-      (file) => file.size > 5 * 1024 * 1024
-    );
-
-    if (oversizedFiles.length > 0) {
-      toast.error("File too large", {
-        description: "Each image must be less than 5MB",
+        description: "Please select valid image files (JPEG, PNG, GIF, WebP)",
       });
       return;
     }
@@ -79,7 +77,8 @@ export function EditRoomDialog({
     try {
       const uploadedUrls: string[] = [];
 
-      for (const file of Array.from(files)) {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
         const formData = new FormData();
         formData.append("file", file);
 
@@ -88,6 +87,7 @@ export function EditRoomDialog({
         if (result.success && result.url) {
           uploadedUrls.push(result.url);
         } else {
+          browserLogger.error("Room", `Failed to upload image ${file.name}`, { error: result.error });
           toast.error("Upload failed", {
             description: result.error || `Failed to upload ${file.name}`,
           });
@@ -99,6 +99,7 @@ export function EditRoomDialog({
         toast.success(`${uploadedUrls.length} image(s) uploaded`);
       }
     } catch (error) {
+      browserLogger.error("Room", "Exception uploading room edit images", error);
       toast.error("Upload error", {
         description: "Failed to upload images",
       });
@@ -118,6 +119,7 @@ export function EditRoomDialog({
     e.preventDefault();
 
     if (!session?.user?.token) {
+      browserLogger.warn("Room", "Authentication required to update room");
       toast.error("Authentication required", {
         description: "Please login to update room",
       });
@@ -125,6 +127,7 @@ export function EditRoomDialog({
     }
 
     if (!room) {
+      browserLogger.warn("Room", "Room data missing when submitting update");
       toast.error("Error", {
         description: "Room data not found",
       });
@@ -132,6 +135,7 @@ export function EditRoomDialog({
     }
 
     if (!formData.roomName.trim()) {
+      browserLogger.warn("Room", "Validation failed: room name is empty");
       toast.error("Validation error", {
         description: "Please enter a room name",
       });
@@ -140,6 +144,7 @@ export function EditRoomDialog({
 
     const price = parseFloat(formData.price) || 0;
     if (price < 0) {
+      browserLogger.warn("Room", "Validation failed: room price cannot be negative", { price });
       toast.error("Validation error", {
         description: "Price cannot be negative",
       });
@@ -149,29 +154,35 @@ export function EditRoomDialog({
     setIsLoading(true);
 
     try {
-      const result = await UpdateRoomAction(
-        room.roomId,
-        {
-          roomName: formData.roomName.trim(),
-          floorId: room.floorId,
-          images: images,
-          price: price,
-        },
-        session.user.token
-      );
+      const payload = {
+        roomName: formData.roomName.trim(),
+        floorId: room.floorId,
+        images: images,
+        price: price,
+      };
+
+      const result = await UpdateRoomAction(room.roomId, payload, session.user.token);
 
       if (result.success) {
+        browserLogger.success("Room", `Room updated: ${formData.roomName}`, { roomId: room.roomId, payload, result });
         toast.success("Room updated!", {
           description: `${formData.roomName} has been updated`,
         });
-        onSuccess?.();
         onClose();
+        onSuccess?.();
       } else {
+        browserLogger.error("Room", "Failed to update room", {
+          roomId: room.roomId,
+          error: result.error,
+          payload,
+          result,
+        });
         toast.error("Failed to update room", {
           description: result.error || "Something went wrong",
         });
       }
     } catch (error) {
+      browserLogger.error("Room", "Exception updating room", { roomId: room.roomId, error });
       toast.error("Error", {
         description: "Failed to connect to server",
       });
@@ -339,7 +350,7 @@ export function EditRoomDialog({
                         type="file"
                         accept="image/*"
                         multiple
-                        onChange={handleImageUpload}
+                        onChange={handleImageChange}
                         className="hidden"
                         disabled={isUploading}
                       />

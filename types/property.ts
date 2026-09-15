@@ -79,6 +79,8 @@ export type UtilityResponse = {
   utilityId: string;
   roomId: string;
   roomName: string;
+  floorNumber?: number;
+  floorName?: string;
   houseName: string;
   isPay: boolean;
   oldWater: number;
@@ -88,14 +90,25 @@ export type UtilityResponse = {
   waterCost: number;
   totalCost: number;
   month: string;
+  meterImageUrl?: string | null; // Water meter photo URL
 };
 
-export type UtilityRequest = {
+export type CreateUtilityRequest = {
   roomId: string;
   newWater: number;
   month: string;
-  oldWater: number;
+  oldWater?: number | null;
+  meterImageUrl?: string | null;
 };
+
+export type UpdateUtilityRequest = {
+  oldWater?: number | null;
+  newWater?: number | null;
+  meterImageUrl?: string | null;
+};
+
+// Backward-compatibility alias
+export type UtilityRequest = CreateUtilityRequest;
 
 // User types
 export type UserResponse = {

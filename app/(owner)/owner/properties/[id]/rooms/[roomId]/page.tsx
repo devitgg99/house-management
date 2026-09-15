@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { useParams, useRouter } from "next/navigation";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft,
   DoorOpen,
@@ -23,6 +23,9 @@ import {
   CheckCircle,
   XCircle,
   UserPlus,
+  Camera,
+  ZoomIn,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -36,6 +39,17 @@ import { AddUtilityDialog } from "@/components/utilities/add-utility-dialog";
 import { EditUtilityDialog } from "@/components/utilities/edit-utility-dialog";
 import { DeleteUtilityDialog } from "@/components/utilities/delete-utility-dialog";
 import { AssignRenterDialog } from "@/components/rooms/assign-renter-dialog";
+import { browserLogger } from "@/lib/logger";
+import { ensureHttps } from "@/lib/utils";
+
+// Helper to get the most recent month from utilities
+const getMostRecentMonth = (utilityList: UtilityResponse[]) => {
+  if (utilityList.length === 0) return null;
+  const sorted = [...utilityList].sort(
+    (a, b) => new Date(b.month).getTime() - new Date(a.month).getTime()
+  );
+  return sorted[0].month;
+};
 
 export default function RoomDetailPage() {
   const { data: session } = useSession();
@@ -54,40 +68,78 @@ export default function RoomDetailPage() {
     invalidateUtilitiesByHouse,
   } = usePropertyStore();
 
-  const [room, setRoom] = useState<RoomResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  // Initialize room from cached floors if available to eliminate loading flash
+  const [room, setRoom] = useState<RoomResponse | null>(() => {
+    if (typeof window !== "undefined") {
+      return (
+        Object.values(usePropertyStore.getState().roomsByFloor)
+          .flatMap((cached) => cached?.data || [])
+          .find((r) => r.roomId === roomId) || null
+      );
+    }
+    return null;
+  });
+  const [isLoading, setIsLoading] = useState(() => !room);
+  const roomLoadedRef = useRef(!!room);
+  useEffect(() => {
+    if (room) roomLoadedRef.current = true;
+  }, [room]);
+
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isAddUtilityDialogOpen, setIsAddUtilityDialogOpen] = useState(false);
   const [isAssignRenterDialogOpen, setIsAssignRenterDialogOpen] = useState(false);
   
-  // Utilities state
-  const [utilities, setUtilities] = useState<UtilityResponse[]>([]);
+  // Utilities state - initialize from cache to prevent blank utility layout
+  const [utilities, setUtilities] = useState<UtilityResponse[]>(() => {
+    if (typeof window !== "undefined") {
+      return usePropertyStore.getState().getUtilitiesByRoom(roomId) || [];
+    }
+    return [];
+  });
   const [isLoadingUtilities, setIsLoadingUtilities] = useState(false);
-  const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
+  const [selectedMonth, setSelectedMonth] = useState<string | null>(() => {
+    if (typeof window !== "undefined") {
+      const cached = usePropertyStore.getState().getUtilitiesByRoom(roomId);
+      if (cached && cached.length > 0) {
+        return getMostRecentMonth(cached);
+      }
+    }
+    return null;
+  });
   const [isTogglingPayment, setIsTogglingPayment] = useState(false);
   
   // Utility edit/delete state
   const [isEditUtilityDialogOpen, setIsEditUtilityDialogOpen] = useState(false);
   const [isDeleteUtilityDialogOpen, setIsDeleteUtilityDialogOpen] = useState(false);
   const [selectedUtilityForAction, setSelectedUtilityForAction] = useState<UtilityResponse | null>(null);
+  const [viewingMeterImage, setViewingMeterImage] = useState<string | null>(null);
 
   const fetchRoomDetail = useCallback(async () => {
     if (!session?.user?.token || !roomId) return;
 
-    setIsLoading(true);
+    // Only show full loader if room is not yet loaded
+    if (!roomLoadedRef.current) {
+      setIsLoading(true);
+    }
     try {
       const result = await GetRoomByIdAction(roomId, session.user.token);
 
       if (result.success && result.data) {
         setRoom(result.data);
       } else {
+        browserLogger.error("Room", "Failed to load room detail", {
+          roomId,
+          error: result.error,
+          result,
+        });
         toast.error("Failed to load room", {
           description: result.error,
         });
       }
     } catch (error) {
+      browserLogger.error("Room", "Exception fetching room detail", { roomId, error });
       toast.error("Error", {
         description: "Failed to fetch room details",
       });
@@ -96,32 +148,20 @@ export default function RoomDetailPage() {
     }
   }, [session?.user?.token, roomId]);
 
-  // Helper to get the most recent month from utilities
-  const getMostRecentMonth = (utilityList: UtilityResponse[]) => {
-    if (utilityList.length === 0) return null;
-    const sorted = [...utilityList].sort(
-      (a, b) => new Date(b.month).getTime() - new Date(a.month).getTime()
-    );
-    return sorted[0].month;
-  };
-
-  const fetchUtilities = useCallback(async (forceRefresh = false) => {
+  const fetchUtilities = useCallback(async (forceRefresh = false, targetMonth?: string) => {
     if (!session?.user?.token || !roomId) return;
 
     // Check cache first (unless forced refresh)
     if (!forceRefresh) {
-      const cachedUtilities = getUtilitiesByRoom(roomId);
-      if (cachedUtilities) {
+      const cachedUtilities = usePropertyStore.getState().getUtilitiesByRoom(roomId);
+      if (cachedUtilities && cachedUtilities.length > 0) {
         setUtilities(cachedUtilities);
-        if (cachedUtilities.length > 0 && !selectedMonth) {
-          // Select the most recent month by default
-          const recentMonth = getMostRecentMonth(cachedUtilities);
-          if (recentMonth) setSelectedMonth(recentMonth);
-        }
+        setSelectedMonth((prev) => targetMonth || prev || getMostRecentMonth(cachedUtilities));
         return;
       }
     }
 
+    // Soft refresh: only show full card loader if we have no existing utility items
     setIsLoadingUtilities(true);
     try {
       const result = await GetUtilitiesByRoomAction(roomId, session.user.token);
@@ -129,35 +169,36 @@ export default function RoomDetailPage() {
       if (result.success) {
         const utilityData = result.data || [];
         setUtilities(utilityData);
-        setUtilitiesByRoom(roomId, utilityData);
-        if (utilityData.length > 0 && !selectedMonth) {
-          // Select the most recent month by default
-          const recentMonth = getMostRecentMonth(utilityData);
-          if (recentMonth) setSelectedMonth(recentMonth);
-        }
+        usePropertyStore.getState().setUtilitiesByRoom(roomId, utilityData);
+        // Automatically select the newly added/target month or latest
+        setSelectedMonth((prev) => targetMonth || (prev && utilityData.some((u: UtilityResponse) => u.month === prev) ? prev : getMostRecentMonth(utilityData)));
       } else {
+        browserLogger.error("Utility", "Failed to load room utilities", {
+          roomId,
+          error: result.error,
+          result,
+        });
         toast.error("Failed to load utilities", {
           description: result.error,
         });
       }
     } catch (error) {
+      browserLogger.error("Utility", "Exception fetching room utilities", { roomId, error });
       toast.error("Error", {
         description: "Failed to fetch utilities",
       });
     } finally {
       setIsLoadingUtilities(false);
     }
-  }, [session?.user?.token, roomId, selectedMonth, getUtilitiesByRoom, setUtilitiesByRoom]);
+  }, [session?.user?.token, roomId]);
 
   useEffect(() => {
     fetchRoomDetail();
   }, [fetchRoomDetail]);
 
   useEffect(() => {
-    if (room) {
-      fetchUtilities();
-    }
-  }, [room, fetchUtilities]);
+    fetchUtilities();
+  }, [fetchUtilities]);
 
   const handleRoomUpdated = () => {
     if (room?.floorId) {
@@ -175,10 +216,13 @@ export default function RoomDetailPage() {
     router.push(`/owner/properties/${houseId}`);
   };
 
-  const handleUtilityAdded = () => {
+  const handleUtilityAdded = (newMonth?: string) => {
     invalidateUtilitiesByRoom(roomId);
     invalidateUtilitiesByHouse(houseId);
-    fetchUtilities(true);
+    if (newMonth) {
+      setSelectedMonth(newMonth);
+    }
+    fetchUtilities(true, newMonth);
   };
 
   const handleEditUtility = (utility: UtilityResponse) => {
@@ -191,10 +235,13 @@ export default function RoomDetailPage() {
     setIsDeleteUtilityDialogOpen(true);
   };
 
-  const handleUtilityUpdated = () => {
+  const handleUtilityUpdated = (updatedMonth?: string) => {
     invalidateUtilitiesByRoom(roomId);
     invalidateUtilitiesByHouse(houseId);
-    fetchUtilities(true);
+    if (updatedMonth) {
+      setSelectedMonth(updatedMonth);
+    }
+    fetchUtilities(true, updatedMonth);
   };
 
   const handleUtilityDeleted = () => {
@@ -225,11 +272,17 @@ export default function RoomDetailPage() {
         invalidateUtilitiesByHouse(houseId);
         fetchUtilities(true);
       } else {
+        browserLogger.error("Utility", "Failed to update utility payment status", {
+          utilityId,
+          newStatus: !currentStatus,
+          error: result.error,
+        });
         toast.error("Failed to update", {
           description: result.error,
         });
       }
     } catch (error) {
+      browserLogger.error("Utility", "Exception toggling payment status", { utilityId, error });
       toast.error("Error", {
         description: "Failed to update payment status",
       });
@@ -567,6 +620,9 @@ export default function RoomDetailPage() {
           <h2 className="text-lg font-semibold flex items-center gap-2">
             <Droplets className="w-5 h-5 text-blue-500" />
             Utility Bills
+            {isLoadingUtilities && utilities.length > 0 && (
+              <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+            )}
           </h2>
           <Button
             size="sm"
@@ -578,7 +634,7 @@ export default function RoomDetailPage() {
           </Button>
         </div>
 
-        {isLoadingUtilities ? (
+        {isLoadingUtilities && utilities.length === 0 ? (
           <div className="flex items-center justify-center py-12 bg-card rounded-xl border border-border">
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
           </div>
@@ -652,6 +708,52 @@ export default function RoomDetailPage() {
                   </div>
                 </div>
 
+                {/* Meter Reading Photo Proof (if attached) */}
+                {selectedUtility.meterImageUrl && (
+                  <div className="p-4 rounded-xl border border-blue-500/20 bg-blue-500/5 mb-6">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div
+                          onClick={() => setViewingMeterImage(ensureHttps(selectedUtility.meterImageUrl) || null)}
+                          className="relative w-20 h-20 rounded-xl overflow-hidden bg-muted border border-border shrink-0 cursor-pointer group shadow-sm"
+                        >
+                          <img
+                            src={ensureHttps(selectedUtility.meterImageUrl) || ""}
+                            alt="Water meter reading"
+                            className="w-full h-full object-cover transition-transform group-hover:scale-110"
+                            onError={(e) => {
+                              e.currentTarget.style.display = "none";
+                            }}
+                          />
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+                            <ZoomIn className="w-5 h-5" />
+                          </div>
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 mb-1">
+                            <Camera className="w-3.5 h-3.5" />
+                            Meter Photo Proof
+                          </div>
+                          <p className="text-sm font-medium">Physical Dial Reading</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Recorded reading: <span className="font-semibold text-foreground">{selectedUtility.newWater}</span> units
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setViewingMeterImage(selectedUtility.meterImageUrl || null)}
+                        className="gap-1.5 text-xs self-start sm:self-auto rounded-lg"
+                      >
+                        <ZoomIn className="w-3.5 h-3.5" />
+                        Inspect Dial
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
                 {/* Details Table */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between py-2 border-b border-border">
@@ -665,6 +767,21 @@ export default function RoomDetailPage() {
                   <div className="flex items-center justify-between py-2 border-b border-border">
                     <span className="text-muted-foreground">Month</span>
                     <span className="font-medium">{formatMonth(selectedUtility.month)}</span>
+                  </div>
+                  <div className="flex items-center justify-between py-2 border-b border-border">
+                    <span className="text-muted-foreground">Meter Proof Photo</span>
+                    {selectedUtility.meterImageUrl ? (
+                      <button
+                        type="button"
+                        onClick={() => setViewingMeterImage(ensureHttps(selectedUtility.meterImageUrl) || null)}
+                        className="inline-flex items-center gap-1.5 text-xs text-blue-600 font-medium hover:underline"
+                      >
+                        <Camera className="w-3.5 h-3.5" />
+                        Attached (Click to view)
+                      </button>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">No meter photo</span>
+                    )}
                   </div>
                   <div className="flex items-center justify-between py-2">
                     <span className="text-muted-foreground">Payment Status</span>
@@ -804,6 +921,36 @@ export default function RoomDetailPage() {
         onSuccess={handleUtilityDeleted}
         utility={selectedUtilityForAction}
       />
+
+      {/* Meter Photo Lightbox Modal */}
+      <AnimatePresence>
+        {viewingMeterImage && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setViewingMeterImage(null)}
+            className="fixed inset-0 bg-black/85 z-[70] flex items-center justify-center p-4 backdrop-blur-md"
+          >
+            <div className="relative max-w-3xl max-h-[90vh] overflow-hidden rounded-2xl bg-black border border-white/10 shadow-2xl">
+              <button
+                onClick={() => setViewingMeterImage(null)}
+                className="absolute top-3 right-3 p-2 rounded-full bg-black/70 text-white hover:bg-black/90 transition-colors z-10"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              <img
+                src={ensureHttps(viewingMeterImage) || ""}
+                alt="Meter photo verification"
+                className="w-full h-full max-h-[85vh] object-contain"
+                onError={(e) => {
+                  e.currentTarget.style.display = "none";
+                }}
+              />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

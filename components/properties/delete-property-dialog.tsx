@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { DeletePropertyAction } from "@/actions/property/PropertyAction";
 import { PropertyResponse } from "@/types/property";
+import { browserLogger } from "@/lib/logger";
 
 type DeletePropertyDialogProps = {
   isOpen: boolean;
@@ -27,6 +28,7 @@ export function DeletePropertyDialog({
 
   const handleDelete = async () => {
     if (!session?.user?.token) {
+      browserLogger.warn("Property", "Authentication required to delete property");
       toast.error("Authentication required", {
         description: "Please login to delete property",
       });
@@ -34,6 +36,7 @@ export function DeletePropertyDialog({
     }
 
     if (!property?.houseId) {
+      browserLogger.warn("Property", "Property ID not found when deleting property");
       toast.error("Error", {
         description: "Property ID not found",
       });
@@ -46,17 +49,24 @@ export function DeletePropertyDialog({
       const result = await DeletePropertyAction(property.houseId, session.user.token);
 
       if (result.success) {
+        browserLogger.success("Property", `Property deleted: ${property.houseName}`, { houseId: property.houseId });
         toast.success("Property deleted!", {
           description: `${property.houseName} has been deleted`,
         });
-        onSuccess?.();
         onClose();
+        onSuccess?.();
       } else {
+        browserLogger.error("Property", "Failed to delete property", {
+          houseId: property.houseId,
+          error: result.error,
+          result,
+        });
         toast.error("Failed to delete property", {
           description: result.error || "Something went wrong",
         });
       }
     } catch (error) {
+      browserLogger.error("Property", "Exception deleting property", { houseId: property.houseId, error });
       toast.error("Error", {
         description: "Failed to connect to server",
       });

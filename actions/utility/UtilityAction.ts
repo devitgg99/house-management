@@ -53,9 +53,10 @@ export const UpdateUtilityAction = async (
   utilityId: string,
   oldWater: number,
   newWater: number,
-  token: string
+  token: string,
+  meterImageUrl?: string | null
 ) => {
-  const response = await UpdateUtilityService(utilityId, oldWater, newWater, token);
+  const response = await UpdateUtilityService(utilityId, oldWater, newWater, token, meterImageUrl);
   return response;
 };
 

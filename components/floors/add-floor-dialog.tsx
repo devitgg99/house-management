@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { AddFloorAction } from "@/actions/floor/FloorAction";
+import { browserLogger } from "@/lib/logger";
 
 type AddFloorDialogProps = {
   isOpen: boolean;
@@ -34,6 +35,7 @@ export function AddFloorDialog({
     e.preventDefault();
 
     if (!session?.user?.token) {
+      browserLogger.warn("Floor", "Authentication required to add floor");
       toast.error("Authentication required", {
         description: "Please login to add a floor",
       });
@@ -41,6 +43,7 @@ export function AddFloorDialog({
     }
 
     if (!formData.floorName.trim()) {
+      browserLogger.warn("Floor", "Validation failed: floor name is required");
       toast.error("Validation error", {
         description: "Please enter a floor name",
       });
@@ -50,28 +53,35 @@ export function AddFloorDialog({
     setIsLoading(true);
 
     try {
-      const result = await AddFloorAction(
-        {
-          floorNumber: formData.floorNumber,
-          floorName: formData.floorName.trim(),
-          houseId,
-        },
-        session.user.token
-      );
+      const payload = {
+        floorNumber: formData.floorNumber,
+        floorName: formData.floorName.trim(),
+        houseId,
+      };
+
+      const result = await AddFloorAction(payload, session.user.token);
 
       if (result.success) {
+        browserLogger.success("Floor", `Floor added: ${formData.floorName}`, { houseId, payload, result });
         toast.success("Floor added!", {
           description: `${formData.floorName} has been added`,
         });
         setFormData({ floorNumber: 1, floorName: "" });
-        onSuccess?.();
         onClose();
+        onSuccess?.();
       } else {
+        browserLogger.error("Floor", "Failed to add floor", {
+          houseId,
+          error: result.error,
+          payload,
+          result,
+        });
         toast.error("Failed to add floor", {
           description: result.error || "Something went wrong",
         });
       }
     } catch (error) {
+      browserLogger.error("Floor", "Exception adding floor", { houseId, error });
       toast.error("Error", {
         description: "Failed to connect to server",
       });

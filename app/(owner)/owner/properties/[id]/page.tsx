@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { useParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
@@ -20,6 +20,9 @@ import {
   DollarSign,
   Calendar,
   FileDown,
+  Camera,
+  ZoomIn,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -34,6 +37,8 @@ import { AddRoomDialog } from "@/components/rooms/add-room-dialog";
 import { EditRoomDialog } from "@/components/rooms/edit-room-dialog";
 import { DeleteRoomDialog } from "@/components/rooms/delete-room-dialog";
 import { RoomCard } from "@/components/rooms/room-card";
+import { browserLogger } from "@/lib/logger";
+import { ensureHttps } from "@/lib/utils";
 
 export default function PropertyDetailPage() {
   const { data: session } = useSession();
@@ -53,12 +58,29 @@ export default function PropertyDetailPage() {
     invalidateHouseDetails,
     invalidateRoomsByFloor,
     invalidateUtilitiesByHouse,
+    getUtilitiesByHouse,
+    setUtilitiesByHouse,
   } = usePropertyStore();
 
-  const [house, setHouse] = useState<HouseDetailResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [activeFloorId, setActiveFloorId] = useState<string | null>(null);
-  const [rooms, setRooms] = useState<RoomResponse[]>([]);
+  // Initialize cached house and floor to avoid flash of full-screen loader on redirect / navigation
+  const cachedHouse = typeof window !== "undefined" ? usePropertyStore.getState().getHouseDetails(houseId) : null;
+  const storedFloorId = typeof window !== "undefined" ? usePropertyStore.getState().getActiveFloor(houseId) : null;
+  const initialFloorId = cachedHouse?.floors?.find((f) => f.floorId === storedFloorId)?.floorId || cachedHouse?.floors?.[0]?.floorId || null;
+
+  const [house, setHouse] = useState<HouseDetailResponse | null>(cachedHouse);
+  const [isLoading, setIsLoading] = useState(() => !cachedHouse);
+  const houseLoadedRef = useRef(!!cachedHouse);
+  useEffect(() => {
+    if (house) houseLoadedRef.current = true;
+  }, [house]);
+
+  const [activeFloorId, setActiveFloorId] = useState<string | null>(initialFloorId);
+  const [rooms, setRooms] = useState<RoomResponse[]>(() => {
+    if (typeof window !== "undefined" && initialFloorId) {
+      return usePropertyStore.getState().getRoomsByFloor(initialFloorId) || [];
+    }
+    return [];
+  });
   const [isLoadingRooms, setIsLoadingRooms] = useState(false);
   
   // Dialog states
@@ -69,11 +91,13 @@ export default function PropertyDetailPage() {
   const [selectedRoom, setSelectedRoom] = useState<RoomResponse | null>(null);
   
   // Utility report states
-  const [utilities, setUtilities] = useState<UtilityResponse[]>([]);
+  const cachedHouseUtilities = typeof window !== "undefined" ? usePropertyStore.getState().getUtilitiesByHouse(houseId) : null;
+  const [utilities, setUtilities] = useState<UtilityResponse[]>(cachedHouseUtilities || []);
   const [isLoadingUtilities, setIsLoadingUtilities] = useState(false);
   const [selectedReportMonth, setSelectedReportMonth] = useState<string | null>(null);
   const [isTogglingPayment, setIsTogglingPayment] = useState<string | null>(null);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [viewingMeterImage, setViewingMeterImage] = useState<string | null>(null);
   const [availableMonths, setAvailableMonths] = useState<string[]>([]);
   const [exportLang, setExportLang] = useState<"en" | "kh">(language);
 
@@ -87,47 +111,53 @@ export default function PropertyDetailPage() {
 
     // Check cache first (unless forced refresh)
     if (!forceRefresh) {
-      const cachedHouse = getHouseDetails(houseId);
-      if (cachedHouse) {
-        setHouse(cachedHouse);
-        // Use stored active floor or first floor
-        const storedFloorId = getActiveFloor(houseId);
-        const validFloorId = cachedHouse.floors?.find(f => f.floorId === storedFloorId)
-          ? storedFloorId
-          : cachedHouse.floors?.[0]?.floorId || null;
+      const cached = usePropertyStore.getState().getHouseDetails(houseId);
+      if (cached) {
+        setHouse(cached);
+        const storedId = usePropertyStore.getState().getActiveFloor(houseId);
+        const validFloorId = cached.floors?.find((f) => f.floorId === storedId)
+          ? storedId
+          : cached.floors?.[0]?.floorId || null;
         setActiveFloorId(validFloorId);
         setIsLoading(false);
         return;
       }
     }
 
-    setIsLoading(true);
+    if (!houseLoadedRef.current) {
+      setIsLoading(true);
+    }
     try {
       const result = await GetHouseByIdAction(houseId, session.user.token);
 
       if (result.success && result.data) {
         setHouse(result.data);
-        setHouseDetails(houseId, result.data);
+        usePropertyStore.getState().setHouseDetails(houseId, result.data);
         
-        // Use stored active floor or first floor
-        const storedFloorId = getActiveFloor(houseId);
-        const validFloorId = result.data.floors?.find(f => f.floorId === storedFloorId)
-          ? storedFloorId
+        const storedId = usePropertyStore.getState().getActiveFloor(houseId);
+        const validFloorId = result.data.floors?.find((f) => f.floorId === storedId)
+          ? storedId
           : result.data.floors?.[0]?.floorId || null;
         setActiveFloorId(validFloorId);
       } else {
+        browserLogger.error("Property", "Failed to load house detail", {
+          houseId,
+          error: result.error,
+          result,
+        });
         toast.error("Failed to load property", {
           description: result.error,
         });
       }
     } catch (error) {
+      browserLogger.error("Property", "Exception fetching property details", { houseId, error });
       toast.error("Error", {
         description: "Failed to fetch property details",
       });
     } finally {
       setIsLoading(false);
     }
-  }, [session?.user?.token, houseId, getHouseDetails, getActiveFloor, setHouseDetails]);
+  }, [session?.user?.token, houseId]);
 
   const fetchRoomsByFloor = useCallback(async (floorId: string, forceRefresh = false) => {
     if (!session?.user?.token) return;
@@ -135,7 +165,7 @@ export default function PropertyDetailPage() {
     // Check cache first (unless forced refresh)
     if (!forceRefresh) {
       const cachedRooms = getRoomsByFloor(floorId);
-      if (cachedRooms) {
+      if (cachedRooms && cachedRooms.length > 0) {
         setRooms(cachedRooms);
         return;
       }
@@ -150,12 +180,18 @@ export default function PropertyDetailPage() {
         setRooms(roomsData);
         setRoomsByFloor(floorId, roomsData);
       } else {
+        browserLogger.error("Room", "Failed to load rooms for floor", {
+          floorId,
+          error: result.error,
+          result,
+        });
         toast.error("Failed to load rooms", {
           description: result.error,
         });
         setRooms([]);
       }
     } catch (error) {
+      browserLogger.error("Room", "Exception fetching rooms for floor", { floorId, error });
       toast.error("Error", {
         description: "Failed to fetch rooms",
       });
@@ -165,7 +201,7 @@ export default function PropertyDetailPage() {
     }
   }, [session?.user?.token, getRoomsByFloor, setRoomsByFloor]);
 
-  // Fetch all utilities first to get available months
+  // Fetch all utilities first to get available months without dependency cycles
   const fetchAvailableMonths = useCallback(async () => {
     if (!session?.user?.token || !houseId) return;
 
@@ -173,27 +209,33 @@ export default function PropertyDetailPage() {
       const result = await GetUtilitiesByHouseAction(houseId, session.user.token);
       if (result.success) {
         const utilityData = result.data || [];
+        setUtilitiesByHouse(houseId, utilityData);
         const monthSet = new Set<string>(utilityData.map((u: UtilityResponse) => u.month));
         const months = [...monthSet].sort(
           (a, b) => new Date(b).getTime() - new Date(a).getTime()
         );
         setAvailableMonths(months);
-        // Set first month as selected if not set
-        if (months.length > 0 && !selectedReportMonth) {
-          setSelectedReportMonth(months[0]);
+        // Set first month as selected if not set yet (using functional updater to avoid dependency loop)
+        if (months.length > 0) {
+          setSelectedReportMonth((prev) => prev || months[0]);
         }
+      } else {
+        browserLogger.error("Utility", "Failed to fetch available utility months", {
+          houseId,
+          error: result.error,
+        });
       }
     } catch (error) {
-      console.error("Failed to fetch available months:", error);
+      browserLogger.error("Utility", "Exception fetching available utility months", { houseId, error });
     }
-  }, [session?.user?.token, houseId, selectedReportMonth]);
+  }, [session?.user?.token, houseId, setUtilitiesByHouse]);
 
   const fetchUtilities = useCallback(async () => {
     if (!session?.user?.token || !houseId) return;
 
+    // Only show full table loader if no utilities are present yet (prevents layout collapse)
     setIsLoadingUtilities(true);
     try {
-      // Call API with month filter if selected
       const result = await GetUtilitiesByHouseAction(
         houseId, 
         session.user.token,
@@ -201,20 +243,30 @@ export default function PropertyDetailPage() {
       );
 
       if (result.success) {
-        setUtilities(result.data || []);
+        const utilityData = result.data || [];
+        setUtilities(utilityData);
+        if (!selectedReportMonth) {
+          setUtilitiesByHouse(houseId, utilityData);
+        }
       } else {
+        browserLogger.error("Utility", "Failed to load utilities report", {
+          houseId,
+          selectedReportMonth,
+          error: result.error,
+        });
         toast.error("Failed to load utilities", {
           description: result.error,
         });
       }
     } catch (error) {
+      browserLogger.error("Utility", "Exception fetching utilities report", { houseId, selectedReportMonth, error });
       toast.error("Error", {
         description: "Failed to fetch utilities",
       });
     } finally {
       setIsLoadingUtilities(false);
     }
-  }, [session?.user?.token, houseId, selectedReportMonth]);
+  }, [session?.user?.token, houseId, selectedReportMonth, setUtilitiesByHouse]);
 
   const handleTogglePayment = async (utilityId: string, currentStatus: boolean) => {
     if (!session?.user?.token) return;
@@ -227,11 +279,17 @@ export default function PropertyDetailPage() {
         toast.success(currentStatus ? "Marked as unpaid" : "Marked as paid");
         fetchUtilities();
       } else {
+        browserLogger.error("Utility", "Failed to update utility payment status", {
+          utilityId,
+          newStatus: !currentStatus,
+          error: result.error,
+        });
         toast.error("Failed to update", {
           description: result.error,
         });
       }
     } catch (error) {
+      browserLogger.error("Utility", "Exception updating utility payment status", { utilityId, error });
       toast.error("Error", {
         description: "Failed to update payment status",
       });
@@ -276,6 +334,12 @@ export default function PropertyDetailPage() {
       
       toast.success("PDF exported successfully");
     } catch (error) {
+      browserLogger.error("Utility", "Exception exporting utility PDF", {
+        houseId,
+        month: selectedReportMonth,
+        lang: exportLang,
+        error,
+      });
       toast.error("Failed to export PDF", {
         description: "Please try again later",
       });
@@ -295,16 +359,14 @@ export default function PropertyDetailPage() {
   }, [activeFloorId, fetchRoomsByFloor]);
 
   useEffect(() => {
-    if (house) {
-      fetchAvailableMonths();
-    }
-  }, [house, fetchAvailableMonths]);
+    fetchAvailableMonths();
+  }, [fetchAvailableMonths]);
 
   useEffect(() => {
-    if (house && selectedReportMonth) {
+    if (selectedReportMonth) {
       fetchUtilities();
     }
-  }, [house, selectedReportMonth, fetchUtilities]);
+  }, [selectedReportMonth, fetchUtilities]);
 
   // Handle floor tab change - persist to store
   const handleFloorChange = useCallback((floorId: string) => {
@@ -606,6 +668,9 @@ export default function PropertyDetailPage() {
           <h2 className="text-lg font-semibold flex items-center gap-2">
             <FileSpreadsheet className="w-5 h-5 text-primary" />
             Utility Report
+            {isLoadingUtilities && utilities.length > 0 && (
+              <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+            )}
           </h2>
           {selectedReportMonth && (
             <div className="flex items-center gap-2">
@@ -636,7 +701,7 @@ export default function PropertyDetailPage() {
           )}
         </div>
 
-        {isLoadingUtilities ? (
+        {isLoadingUtilities && utilities.length === 0 ? (
           <div className="flex items-center justify-center py-12 bg-card rounded-xl border border-border">
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
           </div>
@@ -709,7 +774,20 @@ export default function PropertyDetailPage() {
                     >
                       <td className="px-4 py-3">
                         <div>
-                          <p className="font-medium">{utility.roomName}</p>
+                          <div className="flex items-center gap-1.5">
+                            <p className="font-medium">{utility.roomName}</p>
+                            {utility.meterImageUrl && (
+                              <button
+                                type="button"
+                                onClick={() => setViewingMeterImage(ensureHttps(utility.meterImageUrl) || null)}
+                                className="inline-flex items-center gap-1 text-[11px] font-medium text-blue-600 bg-blue-500/10 hover:bg-blue-500/20 px-1.5 py-0.5 rounded transition-colors"
+                                title="Inspect meter photo proof"
+                              >
+                                <Camera className="w-3 h-3 text-blue-500" />
+                                Proof
+                              </button>
+                            )}
+                          </div>
                           <p className="text-xs text-muted-foreground">
                             {utility.oldWater} → {utility.newWater}
                           </p>
@@ -831,6 +909,36 @@ export default function PropertyDetailPage() {
         onSuccess={handleRoomDeleted}
         room={selectedRoom}
       />
+
+      {/* Meter Photo Lightbox Modal */}
+      <AnimatePresence>
+        {viewingMeterImage && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setViewingMeterImage(null)}
+            className="fixed inset-0 bg-black/85 z-[70] flex items-center justify-center p-4 backdrop-blur-md"
+          >
+            <div className="relative max-w-3xl max-h-[90vh] overflow-hidden rounded-2xl bg-black border border-white/10 shadow-2xl">
+              <button
+                onClick={() => setViewingMeterImage(null)}
+                className="absolute top-3 right-3 p-2 rounded-full bg-black/70 text-white hover:bg-black/90 transition-colors z-10"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              <img
+                src={ensureHttps(viewingMeterImage) || ""}
+                alt="Meter photo verification"
+                className="w-full h-full max-h-[85vh] object-contain"
+                onError={(e) => {
+                  e.currentTarget.style.display = "none";
+                }}
+              />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { DeleteUtilityAction } from "@/actions/utility/UtilityAction";
 import { UtilityResponse } from "@/types/property";
+import { browserLogger } from "@/lib/logger";
 
 type DeleteUtilityDialogProps = {
   isOpen: boolean;
@@ -27,6 +28,7 @@ export function DeleteUtilityDialog({
 
   const handleDelete = async () => {
     if (!session?.user?.token || !utility) {
+      browserLogger.warn("Utility", "Authentication or utility missing when deleting utility");
       toast.error("Authentication required");
       return;
     }
@@ -37,17 +39,31 @@ export function DeleteUtilityDialog({
       const result = await DeleteUtilityAction(utility.utilityId, session.user.token);
 
       if (result.success) {
+        browserLogger.success("Utility", `Utility record deleted for ${utility.roomName}`, {
+          utilityId: utility.utilityId,
+          roomName: utility.roomName,
+          month: utility.month,
+        });
         toast.success("Utility deleted!", {
           description: `Utility record for ${utility.roomName} has been removed`,
         });
-        onSuccess?.();
         onClose();
+        onSuccess?.();
       } else {
+        browserLogger.error("Utility", "Failed to delete utility record", {
+          error: result.error,
+          utilityId: utility.utilityId,
+          result,
+        });
         toast.error("Failed to delete utility", {
           description: result.error || "Something went wrong",
         });
       }
     } catch (error) {
+      browserLogger.error("Utility", "Network or server exception while deleting utility", {
+        error,
+        utilityId: utility.utilityId,
+      });
       toast.error("Error", {
         description: "Failed to connect to server",
       });

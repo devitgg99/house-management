@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { UpdatePropertyAction } from "@/actions/property/PropertyAction";
 import { UploadFileService } from "@/services/file.service";
 import { PropertyResponse } from "@/types/property";
+import { browserLogger } from "@/lib/logger";
 
 type EditPropertyDialogProps = {
   isOpen: boolean;
@@ -41,7 +42,7 @@ export function EditPropertyDialog({
     houseImage: "",
   });
 
-  // Update form when property changes
+  // Sync form data with property prop
   useEffect(() => {
     if (property) {
       setFormData({
@@ -57,18 +58,28 @@ export function EditPropertyDialog({
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (!session?.user?.token) {
+      browserLogger.warn("Property", "Authentication required to upload image during property edit");
+      toast.error("Please login to upload an image");
+      return;
+    }
+
+    // Validate file type
     if (!file.type.startsWith("image/")) {
+      browserLogger.warn("Property", "Invalid file type selected", { fileType: file.type });
       toast.error("Invalid file type", {
         description: "Please select an image file",
       });
       return;
     }
 
+    // Validate file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
+      browserLogger.warn("Property", "File size exceeds 5MB limit", { fileSize: file.size });
       toast.error("File too large", {
         description: "Please select an image under 5MB",
       });
@@ -78,9 +89,9 @@ export function EditPropertyDialog({
     setIsUploading(true);
 
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const result = await UploadFileService(formData);
+      const uploadFormData = new FormData();
+      uploadFormData.append("file", file);
+      const result = await UploadFileService(uploadFormData);
 
       if (result.success && result.url) {
         setFormData((prev) => ({ ...prev, houseImage: result.url! }));
@@ -88,11 +99,13 @@ export function EditPropertyDialog({
           description: "Your image has been uploaded successfully",
         });
       } else {
+        browserLogger.error("Property", "Failed to upload property image", { error: result.error });
         toast.error("Upload failed", {
           description: result.error || "Failed to upload image",
         });
       }
     } catch (error) {
+      browserLogger.error("Property", "Exception uploading property image", error);
       toast.error("Upload error", {
         description: "Failed to connect to server",
       });
@@ -112,6 +125,7 @@ export function EditPropertyDialog({
     e.preventDefault();
     
     if (!session?.user?.token) {
+      browserLogger.warn("Property", "Authentication required to update property");
       toast.error("Authentication required", {
         description: "Please login to update property",
       });
@@ -119,6 +133,7 @@ export function EditPropertyDialog({
     }
 
     if (!property?.houseId) {
+      browserLogger.warn("Property", "Property ID missing when updating property");
       toast.error("Error", {
         description: "Property ID not found",
       });
@@ -135,17 +150,29 @@ export function EditPropertyDialog({
       );
 
       if (result.success) {
+        browserLogger.success("Property", `Property updated: ${formData.houseName}`, {
+          houseId: property.houseId,
+          formData,
+          result,
+        });
         toast.success("Property updated!", {
           description: `${formData.houseName} has been updated successfully`,
         });
-        onSuccess?.();
         onClose();
+        onSuccess?.();
       } else {
+        browserLogger.error("Property", "Failed to update property", {
+          houseId: property.houseId,
+          formData,
+          error: result.error,
+          result,
+        });
         toast.error("Failed to update property", {
           description: result.error || "Something went wrong",
         });
       }
     } catch (error) {
+      browserLogger.error("Property", "Exception updating property", { houseId: property.houseId, error });
       toast.error("Error", {
         description: "Failed to connect to server",
       });
@@ -250,7 +277,7 @@ export function EditPropertyDialog({
                   ref={fileInputRef}
                   type="file"
                   accept="image/*"
-                  onChange={handleFileSelect}
+                  onChange={handleImageChange}
                   className="hidden"
                   disabled={isLoading || isUploading}
                 />

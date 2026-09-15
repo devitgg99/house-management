@@ -188,10 +188,11 @@ export const UpdateUtilityService = async (
   utilityId: string,
   oldWater: number,
   newWater: number,
-  token: string
+  token: string,
+  meterImageUrl?: string | null
 ) => {
   try {
-    console.log("📤 Updating utility:", utilityId, { oldWater, newWater });
+    console.log("📤 Updating utility:", utilityId, { oldWater, newWater, meterImageUrl });
     
     const res = await fetch(`${API_BASE_URL}/utility/${utilityId}`, {
       method: "PUT",
@@ -199,7 +200,7 @@ export const UpdateUtilityService = async (
         "Content-Type": "application/json",
         "Authorization": `Bearer ${token}`,
       },
-      body: JSON.stringify({ oldWater, newWater }),
+      body: JSON.stringify({ oldWater, newWater, meterImageUrl }),
     });
 
     const data = await res.json();

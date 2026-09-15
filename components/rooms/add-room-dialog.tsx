@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { AddRoomAction } from "@/actions/room/RoomAction";
 import { UploadFileAction } from "@/actions/file/FileAction";
+import { browserLogger } from "@/lib/logger";
 
 type AddRoomDialogProps = {
   isOpen: boolean;
@@ -40,6 +41,12 @@ export function AddRoomDialog({
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
+
+    if (!session?.user?.token) {
+      browserLogger.warn("Room", "Authentication required to upload room images");
+      toast.error("Please login to upload images");
+      return;
+    }
 
     const validTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
     const invalidFiles = Array.from(files).filter(
@@ -82,6 +89,7 @@ export function AddRoomDialog({
         if (result.success && result.url) {
           uploadedUrls.push(result.url);
         } else {
+          browserLogger.error("Room", `Failed to upload image ${file.name}`, { error: result.error });
           toast.error("Upload failed", {
             description: result.error || `Failed to upload ${file.name}`,
           });
@@ -94,6 +102,7 @@ export function AddRoomDialog({
         toast.success(`${uploadedUrls.length} image(s) uploaded`);
       }
     } catch (error) {
+      browserLogger.error("Room", "Exception uploading room images", error);
       toast.error("Upload error", {
         description: "Failed to upload images",
       });
@@ -117,6 +126,7 @@ export function AddRoomDialog({
     e.preventDefault();
 
     if (!session?.user?.token) {
+      browserLogger.warn("Room", "Authentication required to add room");
       toast.error("Authentication required", {
         description: "Please login to add a room",
       });
@@ -124,6 +134,7 @@ export function AddRoomDialog({
     }
 
     if (!formData.roomName.trim()) {
+      browserLogger.warn("Room", "Validation failed: room name is empty");
       toast.error("Validation error", {
         description: "Please enter a room name",
       });
@@ -132,6 +143,7 @@ export function AddRoomDialog({
 
     const price = parseFloat(formData.price) || 0;
     if (price < 0) {
+      browserLogger.warn("Room", "Validation failed: room price cannot be negative", { price });
       toast.error("Validation error", {
         description: "Price cannot be negative",
       });
@@ -141,17 +153,17 @@ export function AddRoomDialog({
     setIsLoading(true);
 
     try {
-      const result = await AddRoomAction(
-        {
-          roomName: formData.roomName.trim(),
-          floorId,
-          images: images.length > 0 ? images : [],
-          price: price,
-        },
-        session.user.token
-      );
+      const payload = {
+        roomName: formData.roomName.trim(),
+        floorId,
+        images: images.length > 0 ? images : [],
+        price: price,
+      };
+
+      const result = await AddRoomAction(payload, session.user.token);
 
       if (result.success) {
+        browserLogger.success("Room", `Room added: ${formData.roomName}`, { floorId, payload, result });
         toast.success("Room added!", {
           description: `${formData.roomName} has been added to ${floorName}`,
         });
@@ -161,11 +173,18 @@ export function AddRoomDialog({
         onSuccess?.();
         onClose();
       } else {
+        browserLogger.error("Room", "Failed to add room", {
+          floorId,
+          error: result.error,
+          payload,
+          result,
+        });
         toast.error("Failed to add room", {
           description: result.error || "Something went wrong",
         });
       }
     } catch (error) {
+      browserLogger.error("Room", "Exception adding room", { floorId, error });
       toast.error("Error", {
         description: "Failed to connect to server",
       });

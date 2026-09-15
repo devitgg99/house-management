@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { AddPropertyAction } from "@/actions/property/PropertyAction";
 import { UploadFileService } from "@/services/file.service";
+import { browserLogger } from "@/lib/logger";
 
 type AddPropertyDialogProps = {
   isOpen: boolean;
@@ -29,7 +30,6 @@ export function AddPropertyDialog({
   onSuccess,
 }: AddPropertyDialogProps) {
   const { data: session } = useSession();
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [formData, setFormData] = useState({
@@ -37,6 +37,7 @@ export function AddPropertyDialog({
     houseAddress: "",
     houseImage: "",
   });
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -47,18 +48,25 @@ export function AddPropertyDialog({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate file type
-    if (!file.type.startsWith("image/")) {
+    if (!session?.user?.token) {
+      browserLogger.warn("Property", "Authentication required to upload property image");
+      toast.error("Please login to upload an image");
+      return;
+    }
+
+    const validTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+    if (!validTypes.includes(file.type)) {
+      browserLogger.warn("Property", "Invalid image type selected", { fileType: file.type });
       toast.error("Invalid file type", {
-        description: "Please select an image file",
+        description: "Please upload an image file (JPEG, PNG, GIF, WEBP)",
       });
       return;
     }
 
-    // Validate file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
+      browserLogger.warn("Property", "File size exceeds 5MB limit", { fileSize: file.size });
       toast.error("File too large", {
-        description: "Please select an image under 5MB",
+        description: "Image size should be less than 5MB",
       });
       return;
     }
@@ -66,9 +74,9 @@ export function AddPropertyDialog({
     setIsUploading(true);
 
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const result = await UploadFileService(formData);
+      const uploadFormData = new FormData();
+      uploadFormData.append("file", file);
+      const result = await UploadFileService(uploadFormData);
 
       if (result.success && result.url) {
         setFormData((prev) => ({ ...prev, houseImage: result.url! }));
@@ -76,17 +84,18 @@ export function AddPropertyDialog({
           description: "Your image has been uploaded successfully",
         });
       } else {
+        browserLogger.error("Property", "Failed to upload property image", { error: result.error });
         toast.error("Upload failed", {
           description: result.error || "Failed to upload image",
         });
       }
     } catch (error) {
+      browserLogger.error("Property", "Exception uploading property image", error);
       toast.error("Upload error", {
         description: "Failed to connect to server",
       });
     } finally {
       setIsUploading(false);
-      // Reset file input
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
@@ -101,6 +110,7 @@ export function AddPropertyDialog({
     e.preventDefault();
     
     if (!session?.user?.token) {
+      browserLogger.warn("Property", "Authentication required to add property");
       toast.error("Authentication required", {
         description: "Please login to add a property",
       });
@@ -113,18 +123,25 @@ export function AddPropertyDialog({
       const result = await AddPropertyAction(formData, session.user.token);
 
       if (result.success) {
+        browserLogger.success("Property", `Property added: ${formData.houseName}`, { formData, result });
         toast.success("Property added!", {
           description: `${formData.houseName} has been created successfully`,
         });
         setFormData({ houseName: "", houseAddress: "", houseImage: "" });
-        onSuccess?.();
         onClose();
+        onSuccess?.();
       } else {
+        browserLogger.error("Property", "Failed to add property", {
+          formData,
+          error: result.error,
+          result,
+        });
         toast.error("Failed to add property", {
           description: result.error || "Something went wrong",
         });
       }
     } catch (error) {
+      browserLogger.error("Property", "Exception adding property", { formData, error });
       toast.error("Error", {
         description: "Failed to connect to server",
       });

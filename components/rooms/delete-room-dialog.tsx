@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { DeleteRoomAction } from "@/actions/room/RoomAction";
 import { RoomResponse } from "@/types/property";
+import { browserLogger } from "@/lib/logger";
 
 type DeleteRoomDialogProps = {
   isOpen: boolean;
@@ -27,6 +28,7 @@ export function DeleteRoomDialog({
 
   const handleDelete = async () => {
     if (!session?.user?.token) {
+      browserLogger.warn("Room", "Authentication required to delete room");
       toast.error("Authentication required", {
         description: "Please login to delete room",
       });
@@ -34,6 +36,7 @@ export function DeleteRoomDialog({
     }
 
     if (!room?.roomId) {
+      browserLogger.warn("Room", "Room ID missing when deleting room");
       toast.error("Error", {
         description: "Room ID not found",
       });
@@ -46,17 +49,24 @@ export function DeleteRoomDialog({
       const result = await DeleteRoomAction(room.roomId, session.user.token);
 
       if (result.success) {
+        browserLogger.success("Room", `Room deleted: ${room.roomName}`, { roomId: room.roomId });
         toast.success("Room deleted!", {
           description: `${room.roomName} has been deleted`,
         });
-        onSuccess?.();
         onClose();
+        onSuccess?.();
       } else {
+        browserLogger.error("Room", "Failed to delete room", {
+          roomId: room.roomId,
+          error: result.error,
+          result,
+        });
         toast.error("Failed to delete room", {
           description: result.error || "Something went wrong",
         });
       }
     } catch (error) {
+      browserLogger.error("Room", "Exception deleting room", { roomId: room.roomId, error });
       toast.error("Error", {
         description: "Failed to connect to server",
       });
