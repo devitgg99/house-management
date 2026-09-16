@@ -13,6 +13,8 @@ import {
 } from "lucide-react";
 import { PropertyResponse } from "@/types/property";
 
+import { ensureHttps } from "@/lib/utils";
+
 type PropertyCardProps = {
   property: PropertyResponse;
   index: number;
@@ -24,7 +26,7 @@ export function PropertyCard({ property, index, onEdit, onDelete }: PropertyCard
   const router = useRouter();
   const [showMenu, setShowMenu] = useState(false);
 
-  const imageUrl = property.houseImage || "https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=800&auto=format&fit=crop&q=60";
+  const imageUrl = ensureHttps(property.houseImage) || "https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=800&auto=format&fit=crop&q=60";
 
   const handleViewRooms = () => {
     router.push(`/owner/properties/${property.houseId}`);

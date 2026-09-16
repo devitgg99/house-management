@@ -472,7 +472,7 @@ export default function PropertyDetailPage() {
             {/* House Image */}
             {house.houseImage ? (
               <img
-                src={house.houseImage}
+                src={ensureHttps(house.houseImage) || ""}
                 alt={house.houseName}
                 className="w-20 h-20 rounded-xl object-cover"
               />

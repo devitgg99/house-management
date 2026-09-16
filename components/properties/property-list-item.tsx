@@ -6,6 +6,8 @@ import { motion } from "framer-motion";
 import { MapPin, Building2, Eye, Edit, MoreVertical, Trash2 } from "lucide-react";
 import { PropertyResponse } from "@/types/property";
 
+import { ensureHttps } from "@/lib/utils";
+
 type PropertyListItemProps = {
   property: PropertyResponse;
   index: number;
@@ -17,7 +19,7 @@ export function PropertyListItem({ property, index, onEdit, onDelete }: Property
   const router = useRouter();
   const [showMenu, setShowMenu] = useState(false);
 
-  const imageUrl = property.houseImage || "https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=800&auto=format&fit=crop&q=60";
+  const imageUrl = ensureHttps(property.houseImage) || "https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=800&auto=format&fit=crop&q=60";
 
   const handleViewRooms = () => {
     router.push(`/owner/properties/${property.houseId}`);

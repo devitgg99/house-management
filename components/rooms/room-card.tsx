@@ -6,6 +6,8 @@ import { motion } from "framer-motion";
 import { MoreVertical, Edit, Trash2, User, ImageIcon, DollarSign } from "lucide-react";
 import { RoomResponse } from "@/types/property";
 
+import { ensureHttps } from "@/lib/utils";
+
 type RoomCardProps = {
   room: RoomResponse;
   index: number;
@@ -41,6 +43,8 @@ export function RoomCard({ room, index, onEdit, onDelete }: RoomCardProps) {
     onDelete?.(room);
   };
 
+  const roomImage = ensureHttps(room.images?.[0] && room.images[0] !== "string" ? room.images[0] : null);
+
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.9 }}
@@ -56,9 +60,9 @@ export function RoomCard({ room, index, onEdit, onDelete }: RoomCardProps) {
     >
       {/* Room Image or Placeholder */}
       <div className="relative w-full h-24 rounded-lg overflow-hidden mb-3 bg-muted">
-        {room.images?.[0] && room.images[0] !== "string" ? (
+        {roomImage ? (
           <img
-            src={room.images[0]}
+            src={roomImage}
             alt={room.roomName}
             className="w-full h-full object-cover"
           />

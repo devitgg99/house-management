@@ -12,7 +12,10 @@ export function cn(...inputs: ClassValue[]) {
 export function ensureHttps(url?: string | null): string | null {
   if (!url) return null;
 
-  let formattedUrl = url;
+  let formattedUrl = String(url).trim();
+  // Strip surrounding quotes, backslashes, and URL-encoded quotes (%22, %27)
+  formattedUrl = formattedUrl.replace(/^["'`\\]+|["'`\\]+$/g, "").replace(/%22|%27/gi, "").trim();
+  if (!formattedUrl) return null;
 
   // If it's a relative upload path like "uploads/..." or "/uploads/..."
   if (

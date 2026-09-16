@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { DeletePropertyAction } from "@/actions/property/PropertyAction";
 import { PropertyResponse } from "@/types/property";
+import { ensureHttps } from "@/lib/utils";
 import { browserLogger } from "@/lib/logger";
 
 type DeletePropertyDialogProps = {
@@ -135,7 +136,7 @@ export function DeletePropertyDialog({
               <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 border border-border">
                 {property.houseImage && (
                   <img
-                    src={property.houseImage}
+                    src={ensureHttps(property.houseImage) || ""}
                     alt={property.houseName}
                     className="w-12 h-12 rounded-lg object-cover"
                     onError={(e) => {
