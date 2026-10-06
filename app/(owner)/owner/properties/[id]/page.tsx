@@ -39,6 +39,7 @@ import { DeleteRoomDialog } from "@/components/rooms/delete-room-dialog";
 import { RoomCard } from "@/components/rooms/room-card";
 import { browserLogger } from "@/lib/logger";
 import { ensureHttps } from "@/lib/utils";
+import { exportUtilityReportToPdfFrontend } from "@/lib/pdf/export-utility-pdf";
 
 export default function PropertyDetailPage() {
   const { data: session } = useSession();
@@ -299,47 +300,67 @@ export default function PropertyDetailPage() {
   };
 
   const handleExportPdf = async () => {
-    if (!session?.user?.token || !selectedReportMonth) {
+    if (!selectedReportMonth) {
       toast.error("Please select a month to export");
+      return;
+    }
+
+    if (utilities.length === 0) {
+      toast.error("No utility records available for this month");
       return;
     }
     
     setIsExportingPdf(true);
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL;
-      const response = await fetch(
-        `${apiUrl}/utility/house/${houseId}/pdf?month=${selectedReportMonth}&lang=${exportLang}`,
-        {
-          method: "GET",
-          headers: {
-            "Authorization": `Bearer ${session.user.token}`,
-          },
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error("Failed to export PDF");
-      }
-
-      // Get blob and create download link
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `utility-report-${house?.houseName || houseId}-${selectedReportMonth}-${exportLang}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
+      // 1. Export using frontend rendering (instant, client-side PDF generation)
+      await exportUtilityReportToPdfFrontend({
+        house: house || { houseName: "House Property", houseAddress: "" },
+        month: selectedReportMonth,
+        utilities: utilities,
+        lang: exportLang,
+      });
       
       toast.success("PDF exported successfully");
     } catch (error) {
-      browserLogger.error("Utility", "Exception exporting utility PDF", {
+      browserLogger.error("Utility", "Exception exporting utility PDF via frontend, attempting backend fallback", {
         houseId,
         month: selectedReportMonth,
         lang: exportLang,
         error,
       });
+
+      // 2. Fallback to backend PDF API stream if frontend encounters any issue
+      try {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+        if (session?.user?.token && apiUrl) {
+          const response = await fetch(
+            `${apiUrl}/utility/house/${houseId}/pdf?month=${selectedReportMonth}&lang=${exportLang}`,
+            {
+              method: "GET",
+              headers: {
+                Authorization: `Bearer ${session.user.token}`,
+              },
+            }
+          );
+
+          if (response.ok) {
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = `utility-report-${house?.houseName || houseId}-${selectedReportMonth}-${exportLang}.pdf`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+            toast.success("PDF exported successfully");
+            return;
+          }
+        }
+      } catch (fallbackError) {
+        browserLogger.error("Utility", "Backend PDF fallback also failed", { fallbackError });
+      }
+
       toast.error("Failed to export PDF", {
         description: "Please try again later",
       });
