@@ -40,6 +40,7 @@ import { RoomCard } from "@/components/rooms/room-card";
 import { browserLogger } from "@/lib/logger";
 import { ensureHttps } from "@/lib/utils";
 import { exportUtilityReportToPdfFrontend } from "@/lib/pdf/export-utility-pdf";
+import { UtilityPdfDialog } from "@/components/utilities/utility-pdf-dialog";
 
 export default function PropertyDetailPage() {
   const { data: session } = useSession();
@@ -98,6 +99,7 @@ export default function PropertyDetailPage() {
   const [selectedReportMonth, setSelectedReportMonth] = useState<string | null>(null);
   const [isTogglingPayment, setIsTogglingPayment] = useState<string | null>(null);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [isPdfDialogOpen, setIsPdfDialogOpen] = useState(false);
   const [viewingMeterImage, setViewingMeterImage] = useState<string | null>(null);
   const [availableMonths, setAvailableMonths] = useState<string[]>([]);
   const [exportLang, setExportLang] = useState<"en" | "kh">(language);
@@ -704,9 +706,19 @@ export default function PropertyDetailPage() {
                 <option value="en">🇺🇸 English</option>
                 <option value="kh">🇰🇭 ខ្មែរ</option>
               </select>
+
               <Button
                 size="sm"
                 variant="outline"
+                onClick={() => setIsPdfDialogOpen(true)}
+                className="gap-2 border-blue-500/30 text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/50"
+              >
+                <ZoomIn className="w-4 h-4" />
+                Preview PDF
+              </Button>
+
+              <Button
+                size="sm"
                 onClick={handleExportPdf}
                 disabled={isExportingPdf}
                 className="gap-2"
@@ -960,6 +972,16 @@ export default function PropertyDetailPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Frontend PDF Export & Preview Dialog */}
+      <UtilityPdfDialog
+        isOpen={isPdfDialogOpen}
+        onClose={() => setIsPdfDialogOpen(false)}
+        house={house}
+        month={selectedReportMonth}
+        utilities={utilities}
+        initialLang={exportLang}
+      />
     </div>
   );
 }
