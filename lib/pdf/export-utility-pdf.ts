@@ -211,26 +211,26 @@ export function generateUtilityReportHtml({
                       const bg = rIdx % 2 === 0 ? "#ffffff" : "#f8fafc";
                       return `
                       <tr style="background-color: ${bg}; border-bottom: 1px solid #f1f5f9;">
-                        <td style="padding: 7px 6px; text-align: center; color: #94a3b8; border-right: 1px solid #f1f5f9;">${absIdx}</td>
-                        <td style="padding: 7px 8px; text-align: left; font-weight: 700; color: #0f172a; border-right: 1px solid #f1f5f9; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                        <td style="padding: 6px 6px; text-align: center; color: #94a3b8; border-right: 1px solid #f1f5f9;">${absIdx}</td>
+                        <td style="padding: 6px 8px; text-align: left; font-weight: 700; color: #0f172a; border-right: 1px solid #f1f5f9; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                           ${u.roomName || `Room #${absIdx}`}
                         </td>
-                        <td style="padding: 7px 6px; text-align: center; font-family: monospace; font-size: 10px; color: #475569; border-right: 1px solid #f1f5f9; font-variant-numeric: tabular-nums;">
+                        <td style="padding: 6px 6px; text-align: center; font-family: monospace; font-size: 10px; color: #475569; border-right: 1px solid #f1f5f9; font-variant-numeric: tabular-nums;">
                           ${u.oldWater} → ${u.newWater}
                         </td>
-                        <td style="padding: 7px 6px; text-align: right; font-weight: 700; color: #2563eb; border-right: 1px solid #f1f5f9; font-variant-numeric: tabular-nums;">
+                        <td style="padding: 6px 6px; text-align: right; font-weight: 700; color: #2563eb; border-right: 1px solid #f1f5f9; font-variant-numeric: tabular-nums;">
                           ${u.waterUsage}
                         </td>
-                        <td style="padding: 7px 6px; text-align: right; color: #334155; border-right: 1px solid #f1f5f9; font-variant-numeric: tabular-nums;">
+                        <td style="padding: 6px 6px; text-align: right; color: #334155; border-right: 1px solid #f1f5f9; font-variant-numeric: tabular-nums;">
                           $${(u.waterCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </td>
-                        <td style="padding: 7px 6px; text-align: right; color: #334155; border-right: 1px solid #f1f5f9; font-variant-numeric: tabular-nums;">
+                        <td style="padding: 6px 6px; text-align: right; color: #334155; border-right: 1px solid #f1f5f9; font-variant-numeric: tabular-nums;">
                           $${(u.roomCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </td>
-                        <td style="padding: 7px 6px; text-align: right; font-weight: 800; color: #0f172a; border-right: 1px solid #f1f5f9; font-variant-numeric: tabular-nums;">
+                        <td style="padding: 6px 6px; text-align: right; font-weight: 800; color: #0f172a; border-right: 1px solid #f1f5f9; font-variant-numeric: tabular-nums;">
                           $${(u.totalCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </td>
-                        <td style="padding: 7px 4px; text-align: center;">
+                        <td style="padding: 6px 4px; text-align: center;">
                           <span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; ${
                             u.isPay
                               ? "background-color: #ecfdf5; color: #047857; border: 1px solid #a7f3d0;"

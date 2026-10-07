@@ -14,34 +14,36 @@ export interface UtilityReportDocumentProps {
 
 /**
  * Intelligent pagination calculation for A4 portrait document:
- * - Single-page limit: Up to 12 rooms fit comfortably on a single A4 page with Header, KPIs, Table, Totals, and Signatures.
+ * - Single-page limit: Up to 18 rooms fit comfortably on a single A4 page with Header, KPIs, Table, Totals, and Signatures.
  * - Multi-page pagination:
- *     Page 1: 10 rooms (includes Header + KPI Summary Cards + Table)
- *     Final Page: Up to 14 rooms (includes Continuation Header + Table + Grand Totals + Signatures)
- *     Middle Pages: Up to 16 rooms (includes Continuation Header + Table)
+ *     Page 1: 16 rooms (includes Header + KPI Summary Cards + Table)
+ *     Final Page: Up to 18 rooms (includes Continuation Header + Table + Grand Totals + Signatures)
+ *     Middle Pages: Up to 22 rooms (includes Continuation Header + Table)
  */
 export function paginateUtilities(utilities: UtilityResponse[]): UtilityResponse[][] {
-  if (utilities.length <= 12) {
+  // If 18 or fewer rooms, it all fits on a single A4 page with Header, KPIs, Table, Totals, and Signatures!
+  if (utilities.length <= 18) {
     return [utilities];
   }
 
   const pages: UtilityResponse[][] = [];
   let remaining = [...utilities];
 
-  // Page 1 gets the first 10 rooms to leave ample space for Header & KPI cards
-  pages.push(remaining.slice(0, 10));
-  remaining = remaining.slice(10);
+  // Page 1 gets up to 16 rooms to ensure Page 1 looks full and well-proportioned
+  const page1Capacity = 16;
+  pages.push(remaining.slice(0, page1Capacity));
+  remaining = remaining.slice(page1Capacity);
 
   // Subsequent pages
   while (remaining.length > 0) {
     // If remaining rows can fit on the final page together with Grand Total & Signatures
-    if (remaining.length <= 14) {
+    if (remaining.length <= 18) {
       pages.push(remaining);
       break;
     }
     // Intermediate page
-    pages.push(remaining.slice(0, 16));
-    remaining = remaining.slice(16);
+    pages.push(remaining.slice(0, 22));
+    remaining = remaining.slice(22);
   }
 
   return pages;
@@ -285,28 +287,28 @@ export function UtilityReportDocument({
                           className={isEven ? "bg-white" : "bg-slate-50/60"}
                           style={{ pageBreakInside: "avoid", breakInside: "avoid" }}
                         >
-                          <td className="py-2 px-2 text-center text-slate-400 font-medium border-r border-slate-100">
+                          <td className="py-1.5 px-2 text-center text-slate-400 font-medium border-r border-slate-100">
                             {absoluteIndex}
                           </td>
-                          <td className="py-2 px-2.5 font-bold text-slate-900 border-r border-slate-100 truncate">
+                          <td className="py-1.5 px-2.5 font-bold text-slate-900 border-r border-slate-100 truncate">
                             {u.roomName || `Room #${absoluteIndex}`}
                           </td>
-                          <td className="py-2 px-2 text-center font-mono text-slate-600 text-[10px] tabular-nums border-r border-slate-100">
+                          <td className="py-1.5 px-2 text-center font-mono text-slate-600 text-[10px] tabular-nums border-r border-slate-100">
                             {u.oldWater} → {u.newWater}
                           </td>
-                          <td className="py-2 px-2 text-right font-bold text-blue-600 tabular-nums border-r border-slate-100">
+                          <td className="py-1.5 px-2 text-right font-bold text-blue-600 tabular-nums border-r border-slate-100">
                             {u.waterUsage}
                           </td>
-                          <td className="py-2 px-2 text-right text-slate-700 tabular-nums border-r border-slate-100">
+                          <td className="py-1.5 px-2 text-right text-slate-700 tabular-nums border-r border-slate-100">
                             ${(u.waterCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </td>
-                          <td className="py-2 px-2 text-right text-slate-700 tabular-nums border-r border-slate-100">
+                          <td className="py-1.5 px-2 text-right text-slate-700 tabular-nums border-r border-slate-100">
                             ${(u.roomCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </td>
-                          <td className="py-2 px-2 text-right font-extrabold text-slate-900 tabular-nums border-r border-slate-100">
+                          <td className="py-1.5 px-2 text-right font-extrabold text-slate-900 tabular-nums border-r border-slate-100">
                             ${(u.totalCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </td>
-                          <td className="py-2 px-1.5 text-center">
+                          <td className="py-1.5 px-1.5 text-center">
                             <span
                               className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wide ${
                                 u.isPay
