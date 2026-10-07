@@ -85,7 +85,6 @@ export function UtilityPdfDialog({
         month,
         utilities,
         lang,
-        containerElement: reportRef.current,
       });
       toast.success("PDF report downloaded successfully!");
     } catch (err) {

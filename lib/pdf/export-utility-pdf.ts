@@ -1,7 +1,26 @@
-import html2canvas from "html2canvas";
-import jsPDF from "jspdf";
+import html2canvasPro from "html2canvas-pro";
+import standardHtml2canvas from "html2canvas";
+import { jsPDF } from "jspdf";
+import defaultJsPDF from "jspdf";
 import { HouseDetailResponse, UtilityResponse } from "@/types/property";
 import { paginateUtilities } from "@/components/utilities/utility-report-document";
+
+// Fallback resolver for html2canvas
+const html2canvas = html2canvasPro || standardHtml2canvas;
+
+// Safe constructor resolver for jsPDF across diverse bundler environments
+function createPdfInstance() {
+  const Constructor =
+    typeof jsPDF === "function"
+      ? jsPDF
+      : (defaultJsPDF as unknown as { jsPDF?: typeof jsPDF })?.jsPDF || defaultJsPDF;
+  return new (Constructor as typeof jsPDF)({
+    orientation: "portrait",
+    unit: "mm",
+    format: "a4",
+    compress: true,
+  });
+}
 
 export interface ExportPdfOptions {
   house: HouseDetailResponse | { houseName: string; houseAddress?: string; totalRooms?: number };
@@ -12,7 +31,9 @@ export interface ExportPdfOptions {
 }
 
 /**
- * Generates standalone HTML for headless export when dialog DOM is not present
+ * Generates standalone, inline-styled A4 HTML pages for reliable, isolated canvas capture.
+ * Uses exact pixel dimensions for 96 DPI A4 (794px × 1123px) with standard hex colors
+ * to prevent issues with modern CSS functions (such as oklch) or scale transforms.
  */
 export function generateUtilityReportHtml({
   house,
@@ -65,8 +86,8 @@ export function generateUtilityReportHtml({
       const startIndex = pages.slice(0, pageIndex).reduce((sum, p) => sum + p.length, 0);
 
       return `
-        <div class="a4-print-page" style="width: 210mm; min-height: 297mm; box-sizing: border-box; padding: 13mm 15mm 12mm 15mm; background-color: #ffffff; color: #0f172a; font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Hanuman', 'Noto Sans Khmer', sans-serif; display: flex; flex-direction: column; justify-content: space-between; position: relative;">
-          <!-- Top Area -->
+        <div class="a4-print-page" style="width: 794px; min-height: 1123px; box-sizing: border-box; padding: 48px 56px 44px 56px; background-color: #ffffff; color: #0f172a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Hanuman', 'Noto Sans Khmer', sans-serif; display: flex; flex-direction: column; justify-content: space-between; position: relative;">
+          <!-- Top Content Area -->
           <div style="width: 100%; display: flex; flex-direction: column;">
             ${
               isFirstPage
@@ -265,7 +286,7 @@ export function generateUtilityReportHtml({
             }
           </div>
 
-          <!-- Bottom Area -->
+          <!-- Bottom Content Area -->
           <div style="width: 100%; display: flex; flex-direction: column; margin-top: auto;">
             ${
               isLastPage
@@ -319,64 +340,48 @@ export function generateUtilityReportHtml({
 
 /**
  * High-fidelity client-side PDF export for utility reports.
- * Employs clean page-by-page rendering matching standard A4 dimensions (210mm x 297mm).
+ * Renders discrete, unscaled 794px × 1123px pages off-screen, converts to canvas,
+ * and adds to jsPDF as true A4 pages (210mm x 297mm).
  */
 export async function exportUtilityReportToPdfFrontend({
   house,
   month,
   utilities,
   lang = "en",
-  containerElement,
 }: ExportPdfOptions): Promise<void> {
-  let createdTempContainer: HTMLElement | null = null;
-  let targetPages: HTMLElement[] = [];
+  const tempContainer = document.createElement("div");
+  tempContainer.style.position = "fixed";
+  tempContainer.style.left = "-9999px";
+  tempContainer.style.top = "0";
+  tempContainer.style.width = "794px";
+  tempContainer.style.zIndex = "-9999";
+  tempContainer.style.backgroundColor = "#ffffff";
+  tempContainer.innerHTML = generateUtilityReportHtml({ house, month, utilities, lang });
 
-  // 1. If live container from UtilityPdfDialog is passed and has pages
-  if (containerElement) {
-    const pages = Array.from(containerElement.querySelectorAll<HTMLElement>(".a4-print-page"));
-    if (pages.length > 0) {
-      targetPages = pages;
-    }
-  }
-
-  // 2. If no container passed or empty, mount temporary off-screen container
-  if (targetPages.length === 0) {
-    createdTempContainer = document.createElement("div");
-    createdTempContainer.style.position = "fixed";
-    createdTempContainer.style.left = "-9999px";
-    createdTempContainer.style.top = "0";
-    createdTempContainer.style.width = "210mm";
-    createdTempContainer.style.zIndex = "-9999";
-    createdTempContainer.style.backgroundColor = "#ffffff";
-    createdTempContainer.innerHTML = generateUtilityReportHtml({ house, month, utilities, lang });
-
-    document.body.appendChild(createdTempContainer);
-    targetPages = Array.from(createdTempContainer.querySelectorAll<HTMLElement>(".a4-print-page"));
-  }
-
-  if (targetPages.length === 0) {
-    throw new Error("Unable to locate document pages to generate PDF");
-  }
+  document.body.appendChild(tempContainer);
 
   try {
-    const pdf = new jsPDF({
-      orientation: "portrait",
-      unit: "mm",
-      format: "a4",
-      compress: true,
-    });
+    const targetPages = Array.from(tempContainer.querySelectorAll<HTMLElement>(".a4-print-page"));
+
+    if (targetPages.length === 0) {
+      throw new Error("Unable to locate document pages to generate PDF");
+    }
+
+    const pdf = createPdfInstance();
 
     for (let i = 0; i < targetPages.length; i++) {
       const pageEl = targetPages[i];
 
-      // Capture page with html2canvas at scale 2 (192 DPI) for crisp vector-like text
-      const canvas = await html2canvas(pageEl, {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        backgroundColor: "#ffffff",
-        windowWidth: 794,
-      } as any);
+      // Capture page with html2canvas-pro at scale 2 (high resolution)
+      const canvas = await (html2canvas as unknown as (element: HTMLElement, options: object) => Promise<HTMLCanvasElement>)(
+        pageEl,
+        {
+          scale: 2,
+          useCORS: true,
+          logging: false,
+          backgroundColor: "#ffffff",
+        }
+      );
 
       const imgData = canvas.toDataURL("image/png");
 
@@ -385,7 +390,7 @@ export async function exportUtilityReportToPdfFrontend({
       }
 
       // Add page scaled exactly to A4 boundaries (210mm x 297mm)
-      pdf.addImage(imgData, "PNG", 0, 0, 210, 297, undefined, "FAST");
+      pdf.addImage(imgData, "PNG", 0, 0, 210, 297);
     }
 
     const cleanHouseName = (house.houseName || "house")
@@ -396,8 +401,8 @@ export async function exportUtilityReportToPdfFrontend({
 
     pdf.save(filename);
   } finally {
-    if (createdTempContainer && document.body.contains(createdTempContainer)) {
-      document.body.removeChild(createdTempContainer);
+    if (document.body.contains(tempContainer)) {
+      document.body.removeChild(tempContainer);
     }
   }
 }
