@@ -41,6 +41,11 @@ import { browserLogger } from "@/lib/logger";
 import { ensureHttps } from "@/lib/utils";
 import { exportUtilityReportToPdfFrontend } from "@/lib/pdf/export-utility-pdf";
 import { UtilityPdfDialog } from "@/components/utilities/utility-pdf-dialog";
+import {
+  sortUtilitiesByFloorAndRoom,
+  sortRoomsByNumber,
+  getFloorRank,
+} from "@/components/utilities/utility-report-document";
 
 export default function PropertyDetailPage() {
   const { data: session } = useSession();
@@ -116,11 +121,17 @@ export default function PropertyDetailPage() {
     if (!forceRefresh) {
       const cached = usePropertyStore.getState().getHouseDetails(houseId);
       if (cached) {
-        setHouse(cached);
+        const sortedFloors = cached.floors
+          ? [...cached.floors].sort(
+              (a, b) => getFloorRank(a.floorName, a.floorNumber) - getFloorRank(b.floorName, b.floorNumber)
+            )
+          : [];
+        const houseData = { ...cached, floors: sortedFloors };
+        setHouse(houseData);
         const storedId = usePropertyStore.getState().getActiveFloor(houseId);
-        const validFloorId = cached.floors?.find((f) => f.floorId === storedId)
+        const validFloorId = sortedFloors.find((f) => f.floorId === storedId)
           ? storedId
-          : cached.floors?.[0]?.floorId || null;
+          : sortedFloors[0]?.floorId || null;
         setActiveFloorId(validFloorId);
         setIsLoading(false);
         return;
@@ -134,13 +145,19 @@ export default function PropertyDetailPage() {
       const result = await GetHouseByIdAction(houseId, session.user.token);
 
       if (result.success && result.data) {
-        setHouse(result.data);
-        usePropertyStore.getState().setHouseDetails(houseId, result.data);
+        const sortedFloors = result.data.floors
+          ? [...result.data.floors].sort(
+              (a, b) => getFloorRank(a.floorName, a.floorNumber) - getFloorRank(b.floorName, b.floorNumber)
+            )
+          : [];
+        const houseData = { ...result.data, floors: sortedFloors };
+        setHouse(houseData);
+        usePropertyStore.getState().setHouseDetails(houseId, houseData);
         
         const storedId = usePropertyStore.getState().getActiveFloor(houseId);
-        const validFloorId = result.data.floors?.find((f) => f.floorId === storedId)
+        const validFloorId = sortedFloors.find((f) => f.floorId === storedId)
           ? storedId
-          : result.data.floors?.[0]?.floorId || null;
+          : sortedFloors[0]?.floorId || null;
         setActiveFloorId(validFloorId);
       } else {
         browserLogger.error("Property", "Failed to load house detail", {
@@ -169,7 +186,7 @@ export default function PropertyDetailPage() {
     if (!forceRefresh) {
       const cachedRooms = getRoomsByFloor(floorId);
       if (cachedRooms && cachedRooms.length > 0) {
-        setRooms(cachedRooms);
+        setRooms(sortRoomsByNumber(cachedRooms));
         return;
       }
     }
@@ -179,7 +196,7 @@ export default function PropertyDetailPage() {
       const result = await GetRoomsByFloorAction(floorId, session.user.token);
 
       if (result.success) {
-        const roomsData = result.data || [];
+        const roomsData = sortRoomsByNumber<RoomResponse>((result.data as RoomResponse[]) || []);
         setRooms(roomsData);
         setRoomsByFloor(floorId, roomsData);
       } else {
@@ -246,10 +263,49 @@ export default function PropertyDetailPage() {
       );
 
       if (result.success) {
-        const utilityData = result.data || [];
-        setUtilities(utilityData);
+        const utilityData: UtilityResponse[] = result.data || [];
+
+        // Preload rooms across all floors to map roomId -> { floorNumber, floorName }
+        const roomMap = new Map<string, RoomResponse>();
+        if (house?.floors && house.floors.length > 0) {
+          const floorPromises = house.floors.map(async (floor) => {
+            const cached = getRoomsByFloor(floor.floorId);
+            if (cached && cached.length > 0) return cached;
+            try {
+              const res = await GetRoomsByFloorAction(floor.floorId, session.user.token);
+              if (res.success && res.data) {
+                const sorted = sortRoomsByNumber<RoomResponse>((res.data as RoomResponse[]) || []);
+                setRoomsByFloor(floor.floorId, sorted);
+                return sorted;
+              }
+            } catch {
+              // ignore
+            }
+            return [] as RoomResponse[];
+          });
+
+          const results = await Promise.all(floorPromises);
+          results.flat().forEach((r: RoomResponse) => {
+            if (r?.roomId) roomMap.set(r.roomId, r);
+          });
+        }
+
+        // Enrich utility records with floor metadata from the room lookup if missing
+        const enrichedUtilities = utilityData.map((u) => {
+          const matchedRoom = roomMap.get(u.roomId);
+          return {
+            ...u,
+            floorName: u.floorName || matchedRoom?.floorName || "",
+            floorNumber: typeof u.floorNumber === "number" ? u.floorNumber : matchedRoom?.floorNumber,
+          };
+        });
+
+        // Sort from first floor up, and room 1 to N
+        const sortedUtilities = sortUtilitiesByFloorAndRoom(enrichedUtilities, house);
+
+        setUtilities(sortedUtilities);
         if (!selectedReportMonth) {
-          setUtilitiesByHouse(houseId, utilityData);
+          setUtilitiesByHouse(houseId, sortedUtilities);
         }
       } else {
         browserLogger.error("Utility", "Failed to load utilities report", {
@@ -269,7 +325,7 @@ export default function PropertyDetailPage() {
     } finally {
       setIsLoadingUtilities(false);
     }
-  }, [session?.user?.token, houseId, selectedReportMonth, setUtilitiesByHouse]);
+  }, [session?.user?.token, houseId, selectedReportMonth, setUtilitiesByHouse, house, getRoomsByFloor, setRoomsByFloor]);
 
   const handleTogglePayment = async (utilityId: string, currentStatus: boolean) => {
     if (!session?.user?.token) return;
@@ -807,8 +863,13 @@ export default function PropertyDetailPage() {
                     >
                       <td className="px-4 py-3">
                         <div>
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
                             <p className="font-medium">{utility.roomName}</p>
+                            {utility.floorName && (
+                              <span className="text-[11px] font-medium px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border/50">
+                                {utility.floorName}
+                              </span>
+                            )}
                             {utility.meterImageUrl && (
                               <button
                                 type="button"

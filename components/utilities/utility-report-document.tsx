@@ -49,6 +49,170 @@ export function paginateUtilities(utilities: UtilityResponse[]): UtilityResponse
   return pages;
 }
 
+/**
+ * Extracts a numeric value from room names like "Room-01", "Room 2", "03", "Room-01(ផ្ទះពេទ្យ)", "បន្ទប់ ០១".
+ * Supports Arabic digits (0-9) and Khmer digits (០-៩).
+ */
+export function extractRoomNumber(roomName?: string | null): number {
+  if (!roomName) return 9999;
+  const khmerDigits: Record<string, string> = {
+    "០": "0", "១": "1", "២": "2", "៣": "3", "៤": "4",
+    "៥": "5", "៦": "6", "៧": "7", "៨": "8", "៩": "9",
+  };
+  const normalized = roomName.replace(/[០-៩]/g, (ch) => khmerDigits[ch] || ch);
+  const match = normalized.match(/\d+/);
+  return match ? parseInt(match[0], 10) : 9999;
+}
+
+/**
+ * Calculates floor rank from first floor up (lowest floor / ground floor up to highest floor).
+ * Ground / basement floors get lowest rank (0 or negative), followed by Floor 1 (100), Floor 2 (200), etc.
+ */
+export function getFloorRank(floorName?: string | null, floorNumber?: number | null): number {
+  const name = (floorName || "").toLowerCase().trim();
+  if (name.includes("ក្រោមដី") || name.includes("basement") || name.includes("b1")) {
+    return -100;
+  }
+  if (
+    name.includes("ជាន់ផ្ទាល់ដី") ||
+    name.includes("ជាន់ក្រោម") ||
+    name.includes("ក្រោម") ||
+    name.includes("ground")
+  ) {
+    return 0;
+  }
+  if (name.includes("ជាន់ទី១") || name.includes("ជាន់ទី 1") || name.includes("1st") || name.includes("floor 1")) {
+    return 100;
+  }
+  if (name.includes("ជាន់ទី២") || name.includes("ជាន់ទី 2") || name.includes("2nd") || name.includes("floor 2")) {
+    return 200;
+  }
+  if (name.includes("ជាន់ទី៣") || name.includes("ជាន់ទី 3") || name.includes("3rd") || name.includes("floor 3")) {
+    return 300;
+  }
+  if (name.includes("ជាន់ទី៤") || name.includes("ជាន់ទី 4") || name.includes("4th") || name.includes("floor 4")) {
+    return 400;
+  }
+  if (name.includes("ជាន់ទី៥") || name.includes("ជាន់ទី 5") || name.includes("5th") || name.includes("floor 5")) {
+    return 500;
+  }
+  if (name.includes("ជាន់ទី៦") || name.includes("ជាន់ទី 6") || name.includes("6th") || name.includes("floor 6")) {
+    return 600;
+  }
+  if (name.includes("ជាន់ទី៧") || name.includes("ជាន់ទី 7") || name.includes("7th") || name.includes("floor 7")) {
+    return 700;
+  }
+  if (name.includes("ជាន់ទី៨") || name.includes("ជាន់ទី 8") || name.includes("8th") || name.includes("floor 8")) {
+    return 800;
+  }
+  if (name.includes("ជាន់ទី៩") || name.includes("ជាន់ទី 9") || name.includes("9th") || name.includes("floor 9")) {
+    return 900;
+  }
+  if (name.includes("ជាន់ទី១០") || name.includes("ជាន់ទី 10") || name.includes("10th") || name.includes("floor 10")) {
+    return 1000;
+  }
+  if (name.includes("ដំបូល") || name.includes("rooftop") || name.includes("roof")) {
+    return 9000;
+  }
+
+  if (typeof floorNumber === "number") {
+    return floorNumber * 100;
+  }
+
+  return 500;
+}
+
+/**
+ * Sorts an array of rooms by room number ascending (Room 1 to N, e.g. Room-01, Room-02, ... Room-07).
+ */
+export function sortRoomsByNumber<T extends { roomName?: string | null }>(rooms: T[]): T[] {
+  if (!rooms || rooms.length <= 1) return rooms || [];
+  return [...rooms].sort((a, b) => {
+    const numA = extractRoomNumber(a.roomName);
+    const numB = extractRoomNumber(b.roomName);
+    if (numA !== numB) {
+      return numA - numB;
+    }
+    return (a.roomName || "").localeCompare(b.roomName || "", undefined, {
+      numeric: true,
+      sensitivity: "base",
+    });
+  });
+}
+
+/**
+ * Determines floor sorting rank from lowest floor up (e.g. Ground Floor -> 1st Floor -> 2nd Floor).
+ */
+export function getUtilityFloorRank(
+  u: UtilityResponse,
+  house?: HouseDetailResponse | { houseName: string; floors?: any[] } | null
+): { floorRank: number; resolvedFloorName: string } {
+  const floors = (house as HouseDetailResponse)?.floors || [];
+
+  // 1. Direct floorNumber property on utility
+  if (typeof u.floorNumber === "number") {
+    const fMatch = floors.find((f) => f.floorNumber === u.floorNumber);
+    const resolvedName = u.floorName || fMatch?.floorName || `Floor ${u.floorNumber}`;
+    return {
+      floorRank: getFloorRank(resolvedName, u.floorNumber),
+      resolvedFloorName: resolvedName,
+    };
+  }
+
+  // 2. Match u.floorName in house.floors
+  if (u.floorName && floors.length > 0) {
+    const idx = floors.findIndex(
+      (f) => f.floorName?.trim().toLowerCase() === u.floorName?.trim().toLowerCase()
+    );
+    if (idx !== -1) {
+      const f = floors[idx];
+      return {
+        floorRank: getFloorRank(f.floorName, typeof f.floorNumber === "number" ? f.floorNumber : idx + 1),
+        resolvedFloorName: f.floorName,
+      };
+    }
+  }
+
+  // 3. Keyword detection from floorName or roomName
+  const resolvedName = u.floorName || "";
+  const rank = getFloorRank(u.floorName || u.roomName, null);
+  return { floorRank: rank, resolvedFloorName: resolvedName };
+}
+
+/**
+ * Sorts utility records:
+ * 1. From first floor up (Ground floor / 1st floor -> 2nd floor -> 3rd floor...).
+ * 2. Within each floor, ordered by room number from 1 to N (Room-01, Room-02, Room-03...).
+ */
+export function sortUtilitiesByFloorAndRoom(
+  utilities: UtilityResponse[],
+  house?: HouseDetailResponse | { houseName: string; floors?: any[] } | null
+): UtilityResponse[] {
+  if (!utilities || utilities.length <= 1) return utilities || [];
+
+  return [...utilities].sort((a, b) => {
+    // 1. Compare Floor rank (from lowest floor up)
+    const rankA = getUtilityFloorRank(a, house).floorRank;
+    const rankB = getUtilityFloorRank(b, house).floorRank;
+    if (rankA !== rankB) {
+      return rankA - rankB;
+    }
+
+    // 2. Compare Room number from 1 up
+    const numA = extractRoomNumber(a.roomName);
+    const numB = extractRoomNumber(b.roomName);
+    if (numA !== numB) {
+      return numA - numB;
+    }
+
+    // 3. Fallback to natural alphabetical sort
+    return (a.roomName || "").localeCompare(b.roomName || "", undefined, {
+      numeric: true,
+      sensitivity: "base",
+    });
+  });
+}
+
 export function UtilityReportDocument({
   house,
   month,
@@ -58,16 +222,19 @@ export function UtilityReportDocument({
 }: UtilityReportDocumentProps) {
   const isKhmer = lang === "kh";
 
+  // Sort utilities in order from first floor up, and room 1 to N
+  const sortedUtilities = sortUtilitiesByFloorAndRoom(utilities, house);
+
   // Financial and usage calculations
-  const totalAmount = utilities.reduce((sum, u) => sum + (u.totalCost || 0), 0);
-  const paidAmount = utilities.filter((u) => u.isPay).reduce((sum, u) => sum + (u.totalCost || 0), 0);
-  const unpaidAmount = utilities.filter((u) => !u.isPay).reduce((sum, u) => sum + (u.totalCost || 0), 0);
-  const totalWaterUsage = utilities.reduce((sum, u) => sum + (u.waterUsage || 0), 0);
-  const totalWaterCost = utilities.reduce((sum, u) => sum + (u.waterCost || 0), 0);
-  const totalRoomCost = utilities.reduce((sum, u) => sum + (u.roomCost || 0), 0);
-  const paidCount = utilities.filter((u) => u.isPay).length;
-  const unpaidCount = utilities.filter((u) => !u.isPay).length;
-  const collectionRate = utilities.length > 0 ? Math.round((paidCount / utilities.length) * 100) : 0;
+  const totalAmount = sortedUtilities.reduce((sum, u) => sum + (u.totalCost || 0), 0);
+  const paidAmount = sortedUtilities.filter((u) => u.isPay).reduce((sum, u) => sum + (u.totalCost || 0), 0);
+  const unpaidAmount = sortedUtilities.filter((u) => !u.isPay).reduce((sum, u) => sum + (u.totalCost || 0), 0);
+  const totalWaterUsage = sortedUtilities.reduce((sum, u) => sum + (u.waterUsage || 0), 0);
+  const totalWaterCost = sortedUtilities.reduce((sum, u) => sum + (u.waterCost || 0), 0);
+  const totalRoomCost = sortedUtilities.reduce((sum, u) => sum + (u.roomCost || 0), 0);
+  const paidCount = sortedUtilities.filter((u) => u.isPay).length;
+  const unpaidCount = sortedUtilities.filter((u) => !u.isPay).length;
+  const collectionRate = sortedUtilities.length > 0 ? Math.round((paidCount / sortedUtilities.length) * 100) : 0;
 
   // Format month and issue date
   const formatMonth = (dateStr: string) => {
@@ -92,7 +259,7 @@ export function UtilityReportDocument({
 
   const statementRef = `HMS-${month.replace(/[^0-9]/g, "") || "CUR"}-${(house.houseName || "H").slice(0, 3).toUpperCase()}`;
 
-  const pages = paginateUtilities(utilities);
+  const pages = paginateUtilities(sortedUtilities);
   const totalPages = pages.length;
 
   return (
@@ -291,7 +458,12 @@ export function UtilityReportDocument({
                             {absoluteIndex}
                           </td>
                           <td className="py-1.5 px-2.5 font-bold text-slate-900 border-r border-slate-100 truncate">
-                            {u.roomName || `Room #${absoluteIndex}`}
+                            <div>{u.roomName || `Room #${absoluteIndex}`}</div>
+                            {u.floorName && (
+                              <div className="text-[9px] text-slate-400 font-normal">
+                                {u.floorName}
+                              </div>
+                            )}
                           </td>
                           <td className="py-1.5 px-2 text-center font-mono text-slate-600 text-[10px] tabular-nums border-r border-slate-100">
                             {u.oldWater} → {u.newWater}

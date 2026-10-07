@@ -3,7 +3,7 @@ import standardHtml2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
 import defaultJsPDF from "jspdf";
 import { HouseDetailResponse, UtilityResponse } from "@/types/property";
-import { paginateUtilities } from "@/components/utilities/utility-report-document";
+import { paginateUtilities, sortUtilitiesByFloorAndRoom } from "@/components/utilities/utility-report-document";
 
 // Fallback resolver for html2canvas
 const html2canvas = html2canvasPro || standardHtml2canvas;
@@ -43,15 +43,18 @@ export function generateUtilityReportHtml({
 }: Omit<ExportPdfOptions, "containerElement">): string {
   const isKhmer = lang === "kh";
 
-  const totalAmount = utilities.reduce((sum, u) => sum + (u.totalCost || 0), 0);
-  const paidAmount = utilities.filter((u) => u.isPay).reduce((sum, u) => sum + (u.totalCost || 0), 0);
-  const unpaidAmount = utilities.filter((u) => !u.isPay).reduce((sum, u) => sum + (u.totalCost || 0), 0);
-  const totalWaterUsage = utilities.reduce((sum, u) => sum + (u.waterUsage || 0), 0);
-  const totalWaterCost = utilities.reduce((sum, u) => sum + (u.waterCost || 0), 0);
-  const totalRoomCost = utilities.reduce((sum, u) => sum + (u.roomCost || 0), 0);
-  const paidCount = utilities.filter((u) => u.isPay).length;
-  const unpaidCount = utilities.filter((u) => !u.isPay).length;
-  const collectionRate = utilities.length > 0 ? Math.round((paidCount / utilities.length) * 100) : 0;
+  // Sort from first floor up and room 1 to N
+  const sortedUtilities = sortUtilitiesByFloorAndRoom(utilities, house);
+
+  const totalAmount = sortedUtilities.reduce((sum, u) => sum + (u.totalCost || 0), 0);
+  const paidAmount = sortedUtilities.filter((u) => u.isPay).reduce((sum, u) => sum + (u.totalCost || 0), 0);
+  const unpaidAmount = sortedUtilities.filter((u) => !u.isPay).reduce((sum, u) => sum + (u.totalCost || 0), 0);
+  const totalWaterUsage = sortedUtilities.reduce((sum, u) => sum + (u.waterUsage || 0), 0);
+  const totalWaterCost = sortedUtilities.reduce((sum, u) => sum + (u.waterCost || 0), 0);
+  const totalRoomCost = sortedUtilities.reduce((sum, u) => sum + (u.roomCost || 0), 0);
+  const paidCount = sortedUtilities.filter((u) => u.isPay).length;
+  const unpaidCount = sortedUtilities.filter((u) => !u.isPay).length;
+  const collectionRate = sortedUtilities.length > 0 ? Math.round((paidCount / sortedUtilities.length) * 100) : 0;
 
   const formatMonth = (dateStr: string) => {
     try {
@@ -75,7 +78,7 @@ export function generateUtilityReportHtml({
 
   const statementRef = `HMS-${month.replace(/[^0-9]/g, "") || "CUR"}-${(house.houseName || "H").slice(0, 3).toUpperCase()}`;
 
-  const pages = paginateUtilities(utilities);
+  const pages = paginateUtilities(sortedUtilities);
   const totalPages = pages.length;
 
   return pages
@@ -213,7 +216,8 @@ export function generateUtilityReportHtml({
                       <tr style="background-color: ${bg}; border-bottom: 1px solid #f1f5f9;">
                         <td style="padding: 6px 6px; text-align: center; color: #94a3b8; border-right: 1px solid #f1f5f9;">${absIdx}</td>
                         <td style="padding: 6px 8px; text-align: left; font-weight: 700; color: #0f172a; border-right: 1px solid #f1f5f9; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                          ${u.roomName || `Room #${absIdx}`}
+                          <div>${u.roomName || `Room #${absIdx}`}</div>
+                          ${u.floorName ? `<div style="font-size: 9px; color: #94a3b8; font-weight: 400; margin-top: 1px;">${u.floorName}</div>` : ""}
                         </td>
                         <td style="padding: 6px 6px; text-align: center; font-family: monospace; font-size: 10px; color: #475569; border-right: 1px solid #f1f5f9; font-variant-numeric: tabular-nums;">
                           ${u.oldWater} → ${u.newWater}
