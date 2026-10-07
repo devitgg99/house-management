@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { AddRoomAction } from "@/actions/room/RoomAction";
 import { UploadFileAction } from "@/actions/file/FileAction";
 import { browserLogger } from "@/lib/logger";
+import { isImageFile, compressImage } from "@/lib/image-compression";
 
 type AddRoomDialogProps = {
   isOpen: boolean;
@@ -48,25 +49,11 @@ export function AddRoomDialog({
       return;
     }
 
-    const validTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
-    const invalidFiles = Array.from(files).filter(
-      (file) => !validTypes.includes(file.type)
-    );
+    const invalidFiles = Array.from(files).filter((file) => !isImageFile(file));
 
     if (invalidFiles.length > 0) {
       toast.error("Invalid file type", {
-        description: "Please upload only image files (JPEG, PNG, GIF, WEBP)",
-      });
-      return;
-    }
-
-    const oversizedFiles = Array.from(files).filter(
-      (file) => file.size > 5 * 1024 * 1024
-    );
-
-    if (oversizedFiles.length > 0) {
-      toast.error("File too large", {
-        description: "Each image must be less than 5MB",
+        description: "Please upload only image files (JPEG, PNG, HEIC, WEBP, etc.)",
       });
       return;
     }
@@ -81,8 +68,10 @@ export function AddRoomDialog({
         const previewUrl = URL.createObjectURL(file);
         previewUrls.push(previewUrl);
 
+        // Auto-compress large / mobile camera photos before uploading
+        const fileToUpload = await compressImage(file);
         const formData = new FormData();
-        formData.append("file", file);
+        formData.append("file", fileToUpload);
 
         const result = await UploadFileAction(formData);
 

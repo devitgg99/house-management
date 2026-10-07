@@ -12,6 +12,7 @@ import { UpdateRoomAction } from "@/actions/room/RoomAction";
 import { UploadFileAction } from "@/actions/file/FileAction";
 import { RoomResponse } from "@/types/property";
 import { browserLogger } from "@/lib/logger";
+import { isImageFile, compressImage } from "@/lib/image-compression";
 
 
 type EditRoomDialogProps = {
@@ -59,15 +60,12 @@ export function EditRoomDialog({
       return;
     }
 
-    const validTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
-    const invalidFiles = Array.from(files).filter(
-      (file) => !validTypes.includes(file.type)
-    );
+    const invalidFiles = Array.from(files).filter((file) => !isImageFile(file));
 
     if (invalidFiles.length > 0) {
       browserLogger.warn("Room", "Invalid image file type selected", { invalidFiles: invalidFiles.map(f => f.name) });
       toast.error("Invalid file type", {
-        description: "Please select valid image files (JPEG, PNG, GIF, WebP)",
+        description: "Please select valid image files (JPEG, PNG, HEIC, WebP, etc.)",
       });
       return;
     }
@@ -79,8 +77,10 @@ export function EditRoomDialog({
 
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
+        // Auto-compress large / mobile camera photos before uploading
+        const fileToUpload = await compressImage(file);
         const formData = new FormData();
-        formData.append("file", file);
+        formData.append("file", fileToUpload);
 
         const result = await UploadFileAction(formData);
 

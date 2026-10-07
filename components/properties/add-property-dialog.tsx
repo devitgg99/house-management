@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { AddPropertyAction } from "@/actions/property/PropertyAction";
 import { UploadFileService } from "@/services/file.service";
 import { browserLogger } from "@/lib/logger";
+import { isImageFile, compressImage } from "@/lib/image-compression";
 
 type AddPropertyDialogProps = {
   isOpen: boolean;
@@ -54,19 +55,10 @@ export function AddPropertyDialog({
       return;
     }
 
-    const validTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
-    if (!validTypes.includes(file.type)) {
+    if (!isImageFile(file)) {
       browserLogger.warn("Property", "Invalid image type selected", { fileType: file.type });
       toast.error("Invalid file type", {
-        description: "Please upload an image file (JPEG, PNG, GIF, WEBP)",
-      });
-      return;
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-      browserLogger.warn("Property", "File size exceeds 5MB limit", { fileSize: file.size });
-      toast.error("File too large", {
-        description: "Image size should be less than 5MB",
+        description: "Please upload an image file (JPEG, PNG, HEIC, WEBP, etc.)",
       });
       return;
     }
@@ -74,8 +66,10 @@ export function AddPropertyDialog({
     setIsUploading(true);
 
     try {
+      // Auto-compress large / mobile camera photos before uploading
+      const fileToUpload = await compressImage(file);
       const uploadFormData = new FormData();
-      uploadFormData.append("file", file);
+      uploadFormData.append("file", fileToUpload);
       const result = await UploadFileService(uploadFormData);
 
       if (result.success && result.url) {

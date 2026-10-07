@@ -23,6 +23,7 @@ import { AddUtilityAction } from "@/actions/utility/UtilityAction";
 import { UploadFileAction } from "@/actions/file/FileAction";
 import { browserLogger } from "@/lib/logger";
 import { ensureHttps } from "@/lib/utils";
+import { isImageFile, compressImage } from "@/lib/image-compression";
 
 type AddUtilityDialogProps = {
   isOpen: boolean;
@@ -77,18 +78,10 @@ export function AddUtilityDialog({
     if (!files || files.length === 0) return;
 
     const file = files[0];
-    const validTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
 
-    if (!validTypes.includes(file.type)) {
+    if (!isImageFile(file)) {
       toast.error("Invalid file type", {
-        description: "Please select an image file (JPEG, PNG, GIF, WebP)",
-      });
-      return;
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error("Image too large", {
-        description: "File size must be under 5MB",
+        description: "Please select an image file (JPEG, PNG, HEIC, WebP, etc.)",
       });
       return;
     }
@@ -99,8 +92,10 @@ export function AddUtilityDialog({
     setIsUploadingImage(true);
 
     try {
+      // Auto-compress large / iPhone camera images before uploading
+      const fileToUpload = await compressImage(file);
       const uploadData = new FormData();
-      uploadData.append("file", file);
+      uploadData.append("file", fileToUpload);
 
       const result = await UploadFileAction(uploadData);
 
