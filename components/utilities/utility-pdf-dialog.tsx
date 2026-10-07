@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { HouseDetailResponse, UtilityResponse } from "@/types/property";
 import { Button } from "@/components/ui/button";
@@ -8,11 +8,14 @@ import {
   FileDown,
   Printer,
   Loader2,
-  Sparkles,
-  Building2,
   X,
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
+  FileText,
 } from "lucide-react";
 import { exportUtilityReportToPdfFrontend } from "@/lib/pdf/export-utility-pdf";
+import { UtilityReportDocument, paginateUtilities } from "@/components/utilities/utility-report-document";
 import { toast } from "sonner";
 
 interface UtilityPdfDialogProps {
@@ -34,19 +37,80 @@ export function UtilityPdfDialog({
 }: UtilityPdfDialogProps) {
   const [lang, setLang] = useState<"en" | "kh">(initialLang);
   const [isExporting, setIsExporting] = useState(false);
+  const [zoom, setZoom] = useState<number>(0.95);
   const reportRef = useRef<HTMLDivElement>(null);
+
+  // Sync initial language if prop updates
+  useEffect(() => {
+    setLang(initialLang);
+  }, [initialLang]);
+
+  // Adjust default zoom on smaller screens (mobile / tablet / laptop)
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const width = window.innerWidth;
+      if (width < 768) {
+        setZoom(0.5);
+      } else if (width < 1024) {
+        setZoom(0.75);
+      } else if (width < 1440) {
+        setZoom(0.9);
+      } else {
+        setZoom(1.0);
+      }
+    }
+  }, [isOpen]);
+
+  // Handle ESC key to close
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && isOpen && !isExporting) {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, isExporting, onClose]);
+
+  const handlePrint = useCallback(() => {
+    window.print();
+  }, []);
+
+  const handleDownloadPdf = async () => {
+    if (!house || !month) return;
+    setIsExporting(true);
+    try {
+      await exportUtilityReportToPdfFrontend({
+        house,
+        month,
+        utilities,
+        lang,
+        containerElement: reportRef.current,
+      });
+      toast.success("PDF report downloaded successfully!");
+    } catch (err) {
+      console.error("Failed to generate PDF:", err);
+      toast.error("Failed to generate PDF report");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleBackdropClick = (e: React.MouseEvent) => {
+    if (e.target === e.currentTarget && !isExporting) {
+      onClose();
+    }
+  };
+
+  const handleZoomIn = () => setZoom((prev) => Math.min(Number((prev + 0.1).toFixed(2)), 1.4));
+  const handleZoomOut = () => setZoom((prev) => Math.max(Number((prev - 0.1).toFixed(2)), 0.4));
+  const handleResetZoom = () => setZoom(1.0);
 
   if (!month || !house) return null;
 
   const isKhmer = lang === "kh";
-
-  // Calculate totals
-  const totalAmount = utilities.reduce((sum, u) => sum + (u.totalCost || 0), 0);
-  const paidAmount = utilities.filter((u) => u.isPay).reduce((sum, u) => sum + (u.totalCost || 0), 0);
-  const unpaidAmount = utilities.filter((u) => !u.isPay).reduce((sum, u) => sum + (u.totalCost || 0), 0);
-  const totalWaterUsage = utilities.reduce((sum, u) => sum + (u.waterUsage || 0), 0);
-  const totalWaterCost = utilities.reduce((sum, u) => sum + (u.waterCost || 0), 0);
-  const totalRoomCost = utilities.reduce((sum, u) => sum + (u.roomCost || 0), 0);
+  const pages = paginateUtilities(utilities);
+  const totalPages = pages.length;
 
   const formatMonth = (dateStr: string) => {
     try {
@@ -62,39 +126,6 @@ export function UtilityPdfDialog({
   };
 
   const formattedMonth = formatMonth(month);
-  const formattedDate = new Date().toLocaleDateString(isKhmer ? "km-KH" : "en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-
-  const handleDownloadPdf = async () => {
-    setIsExporting(true);
-    try {
-      await exportUtilityReportToPdfFrontend({
-        house,
-        month,
-        utilities,
-        lang,
-      });
-      toast.success("PDF report downloaded successfully!");
-    } catch (err) {
-      console.error("Failed to generate PDF:", err);
-      toast.error("Failed to generate PDF report");
-    } finally {
-      setIsExporting(false);
-    }
-  };
-
-  const handlePrint = () => {
-    window.print();
-  };
-
-  const handleBackdropClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget && !isExporting) {
-      onClose();
-    }
-  };
 
   return (
     <AnimatePresence>
@@ -104,249 +135,136 @@ export function UtilityPdfDialog({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           onClick={handleBackdropClick}
-          className="fixed inset-0 bg-black/75 backdrop-blur-md z-[80] flex items-center justify-center p-4 overflow-y-auto"
+          className="fixed inset-0 bg-black/85 backdrop-blur-md z-[80] flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-hidden no-print"
         >
           <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            initial={{ opacity: 0, scale: 0.96, y: 15 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            transition={{ type: "spring", duration: 0.3 }}
-            className="w-full max-w-4xl max-h-[92vh] bg-slate-950 text-slate-100 rounded-2xl border border-slate-800 shadow-2xl overflow-hidden flex flex-col my-auto"
+            exit={{ opacity: 0, scale: 0.96, y: 15 }}
+            transition={{ type: "spring", duration: 0.25 }}
+            className="w-full max-w-6xl h-[95vh] bg-slate-950 text-slate-100 rounded-2xl border border-slate-800 shadow-2xl overflow-hidden flex flex-col"
           >
-            {/* Modal Toolbar Header */}
-            <div className="p-4 bg-slate-900 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 shrink-0">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-blue-600/20 text-blue-400 flex items-center justify-center border border-blue-500/30">
-                  <Sparkles className="w-5 h-5" />
+            {/* TOOLBAR HEADER */}
+            <div className="px-4 py-3 bg-slate-900/90 border-b border-slate-800/80 flex flex-wrap items-center justify-between gap-3 shrink-0 backdrop-blur z-20">
+              {/* Document Identity */}
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-blue-600/20 text-blue-400 flex items-center justify-center border border-blue-500/30 shrink-0">
+                  <FileText className="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="text-base font-bold text-white flex items-center gap-2">
-                    {isKhmer ? "មើលគំរូ និង នាំចេញ PDF" : "Utility Report PDF Preview"}
-                  </h2>
-                  <p className="text-xs text-slate-400">
-                    Frontend Client-Side PDF Generator • {house.houseName} ({formattedMonth})
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-sm font-bold text-white tracking-tight">
+                      {isKhmer ? "គំរូឯកសារ PDF A4" : "A4 Utility Report Preview"}
+                    </h2>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                      A4 Portrait • 210 × 297 mm
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-800 text-slate-300 border border-slate-700">
+                      {totalPages} {totalPages === 1 ? (isKhmer ? "ទំព័រ" : "Page") : (isKhmer ? "ទំព័រ" : "Pages")}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {house.houseName} • {formattedMonth} • {utilities.length} {isKhmer ? "បន្ទប់" : "records"}
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              {/* Document Actions & Controls */}
+              <div className="flex items-center flex-wrap gap-2">
+                {/* Zoom Controls */}
+                <div className="flex items-center bg-slate-800/90 rounded-xl border border-slate-700/80 p-0.5">
+                  <button
+                    onClick={handleZoomOut}
+                    title="Zoom Out (-)"
+                    className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
+                  >
+                    <ZoomOut className="w-3.5 h-3.5" />
+                  </button>
+                  <span className="px-2 text-[11px] font-mono text-slate-300 select-none min-w-[42px] text-center">
+                    {Math.round(zoom * 100)}%
+                  </span>
+                  <button
+                    onClick={handleZoomIn}
+                    title="Zoom In (+)"
+                    className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
+                  >
+                    <ZoomIn className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={handleResetZoom}
+                    title="Fit 100%"
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700 transition-colors ml-0.5 border-l border-slate-700"
+                  >
+                    <Maximize2 className="w-3 h-3" />
+                  </button>
+                </div>
+
                 {/* Language Switcher */}
                 <select
                   value={lang}
                   onChange={(e) => setLang(e.target.value as "en" | "kh")}
-                  className="h-9 px-3 rounded-xl border border-slate-700 bg-slate-800 text-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="h-8 px-2.5 rounded-xl border border-slate-700 bg-slate-800 text-slate-200 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="en">🇺🇸 English</option>
                   <option value="kh">🇰🇭 ខ្មែរ</option>
                 </select>
 
+                {/* Print Button */}
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={handlePrint}
-                  className="gap-1.5 border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 text-xs rounded-xl"
+                  className="h-8 gap-1.5 border-slate-700 bg-slate-800/90 text-slate-200 hover:bg-slate-700 hover:text-white text-xs rounded-xl"
+                  title="Print or Save as PDF via Browser (Vector sharp)"
                 >
                   <Printer className="w-3.5 h-3.5" />
-                  Print
+                  {isKhmer ? "បោះពុម្ព / សន្សំជា PDF" : "Print / Save PDF"}
                 </Button>
 
+                {/* Direct Download Button */}
                 <Button
                   size="sm"
                   onClick={handleDownloadPdf}
                   disabled={isExporting}
-                  className="gap-2 bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs rounded-xl shadow-lg shadow-blue-600/30"
+                  className="h-8 gap-1.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs rounded-xl shadow-lg shadow-blue-600/20"
                 >
                   {isExporting ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
                   ) : (
-                    <FileDown className="w-4 h-4" />
+                    <FileDown className="w-3.5 h-3.5" />
                   )}
                   {isKhmer ? "ទាញយក PDF" : "Download PDF"}
                 </Button>
 
+                {/* Close Button */}
                 <button
                   onClick={onClose}
-                  className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors ml-1"
+                  className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors ml-1"
+                  title="Close (Esc)"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
             </div>
 
-            {/* Paper Document Preview Container */}
-            <div className="p-6 sm:p-8 bg-slate-900/60 overflow-y-auto flex justify-center">
+            {/* DOCUMENT VIEWER WORKBENCH */}
+            <div className="flex-1 bg-slate-900/70 overflow-auto p-4 sm:p-8 flex justify-center items-start scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
               <div
                 ref={reportRef}
-                className="w-full max-w-[794px] bg-white text-slate-900 p-8 rounded-xl shadow-2xl border border-slate-200 font-sans"
+                className="transition-transform duration-150 origin-top flex flex-col items-center"
                 style={{
-                  fontFamily:
-                    "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Hanuman', 'Noto Sans Khmer', sans-serif",
+                  transform: `scale(${zoom})`,
+                  width: "210mm",
+                  marginBottom: "40px",
                 }}
               >
-                {/* Document Header */}
-                <div className="flex justify-between items-start border-b-2 border-slate-200 pb-5 mb-6">
-                  <div>
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center text-white text-lg font-bold shadow-md">
-                        <Building2 className="w-5 h-5" />
-                      </div>
-                      <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-                        {house.houseName}
-                      </h1>
-                    </div>
-                    <p className="text-xs text-slate-500 flex items-center gap-1">
-                      📍 {house.houseAddress || "Property Address"}
-                    </p>
-                  </div>
-
-                  <div className="text-right">
-                    <span className="inline-block bg-blue-50 text-blue-700 px-3 py-1 rounded-md text-xs font-semibold border border-blue-200 mb-1.5">
-                      {isKhmer ? "របាយការណ៍បង់ប្រាក់ទឹក និងបន្ទប់" : "UTILITY & RENT REPORT"}
-                    </span>
-                    <p className="text-sm font-bold text-slate-900">
-                      {isKhmer ? "ខែ" : "Month"}: {formattedMonth}
-                    </p>
-                    <p className="text-[11px] text-slate-400 mt-0.5">
-                      {isKhmer ? "ថ្ងៃចេញរបាយការណ៍" : "Generated"}: {formattedDate}
-                    </p>
-                  </div>
-                </div>
-
-                {/* KPI Summary Cards */}
-                <div className="grid grid-cols-4 gap-3 mb-6">
-                  <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-center">
-                    <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-                      {isKhmer ? "សរុបរួម" : "Total Revenue"}
-                    </span>
-                    <p className="text-lg font-extrabold text-slate-900 mt-1">
-                      ${totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                    </p>
-                  </div>
-                  <div className="bg-green-50/80 border border-green-200 rounded-lg p-3 text-center">
-                    <span className="text-[11px] font-semibold text-green-700 uppercase tracking-wider">
-                      {isKhmer ? "បានបង់" : "Total Paid"}
-                    </span>
-                    <p className="text-lg font-extrabold text-green-700 mt-1">
-                      ${paidAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                    </p>
-                  </div>
-                  <div className="bg-amber-50/80 border border-amber-200 rounded-lg p-3 text-center">
-                    <span className="text-[11px] font-semibold text-amber-800 uppercase tracking-wider">
-                      {isKhmer ? "មិនទាន់បង់" : "Total Unpaid"}
-                    </span>
-                    <p className="text-lg font-extrabold text-amber-700 mt-1">
-                      ${unpaidAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                    </p>
-                  </div>
-                  <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-center">
-                    <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-                      {isKhmer ? "បន្ទប់សរុប" : "Total Rooms"}
-                    </span>
-                    <p className="text-lg font-extrabold text-slate-900 mt-1">
-                      {utilities.length}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Main Utility Table */}
-                <div className="overflow-hidden border border-slate-200 rounded-lg mb-6">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="bg-slate-100 border-b border-slate-200 text-slate-700 font-bold">
-                        <th className="p-2.5 text-left w-[5%]">#</th>
-                        <th className="p-2.5 text-left w-[22%]">{isKhmer ? "បន្ទប់" : "Room"}</th>
-                        <th className="p-2.5 text-center w-[16%]">{isKhmer ? "អំណាន (ចាស់→ថ្មី)" : "Reading (Old→New)"}</th>
-                        <th className="p-2.5 text-right w-[11%]">{isKhmer ? "ប្រើប្រាស់" : "Usage (m³)"}</th>
-                        <th className="p-2.5 text-right w-[12%]">{isKhmer ? "ថ្លៃទឹក" : "Water Cost"}</th>
-                        <th className="p-2.5 text-right w-[12%]">{isKhmer ? "ថ្លៃបន្ទប់" : "Room Rent"}</th>
-                        <th className="p-2.5 text-right w-[12%]">{isKhmer ? "សរុប" : "Total"}</th>
-                        <th className="p-2.5 text-center w-[10%]">{isKhmer ? "ស្ថានភាព" : "Status"}</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {utilities.map((u, index) => (
-                        <tr
-                          key={u.utilityId || index}
-                          className={index % 2 === 0 ? "bg-white" : "bg-slate-50/50"}
-                        >
-                          <td className="p-2.5 text-slate-400 font-medium">{index + 1}</td>
-                          <td className="p-2.5 font-semibold text-slate-900">
-                            {u.roomName || `Room #${index + 1}`}
-                          </td>
-                          <td className="p-2.5 text-center font-mono text-slate-600">
-                            {u.oldWater} → {u.newWater}
-                          </td>
-                          <td className="p-2.5 text-right font-semibold text-blue-600">
-                            {u.waterUsage} m³
-                          </td>
-                          <td className="p-2.5 text-right text-slate-700">
-                            ${(u.waterCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                          </td>
-                          <td className="p-2.5 text-right text-slate-700">
-                            ${(u.roomCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                          </td>
-                          <td className="p-2.5 text-right font-bold text-slate-900">
-                            ${(u.totalCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                          </td>
-                          <td className="p-2.5 text-center">
-                            <span
-                              className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                u.isPay
-                                  ? "bg-green-100 text-green-800 border border-green-300"
-                                  : "bg-amber-100 text-amber-800 border border-amber-300"
-                              }`}
-                            >
-                              {u.isPay ? (isKhmer ? "បានបង់" : "PAID") : (isKhmer ? "មិនទាន់បង់" : "UNPAID")}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    <tfoot>
-                      <tr className="bg-slate-100 border-t-2 border-slate-300 font-bold text-slate-900">
-                        <td colSpan={3} className="p-2.5 text-right text-[11px] uppercase">
-                          {isKhmer ? "សរុបសរុប (Grand Total)" : "Grand Total"}
-                        </td>
-                        <td className="p-2.5 text-right text-blue-700">
-                          {totalWaterUsage} m³
-                        </td>
-                        <td className="p-2.5 text-right">
-                          ${totalWaterCost.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                        </td>
-                        <td className="p-2.5 text-right">
-                          ${totalRoomCost.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                        </td>
-                        <td className="p-2.5 text-right text-sm text-blue-700 font-extrabold">
-                          ${totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                        </td>
-                        <td className="p-2.5"></td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-
-                {/* Document Footer & Signature */}
-                <div className="pt-4 border-t border-dashed border-slate-300 flex justify-between items-end">
-                  <div className="text-[11px] text-slate-500 w-1/2">
-                    <p className="font-bold text-slate-700 mb-1">{isKhmer ? "ចំណាំ:" : "Note:"}</p>
-                    <p className="mb-0.5">
-                      • {isKhmer ? "សូមពិនិត្យមើលអំណាននាឡិកាទឹក និងប្រាក់ត្រូវបង់ឱ្យបានត្រឹមត្រូវ" : "Please verify meter readings and payment details before completing transaction."}
-                    </p>
-                    <p>
-                      • {isKhmer ? "របាយការណ៍នេះបង្កើតឡើងដោយស្វ័យប្រវត្តិដោយប្រព័ន្ធគ្រប់គ្រងអចលនទ្រព្យ" : "This document was generated automatically by House Management System."}
-                    </p>
-                  </div>
-
-                  <div className="text-center w-1/3">
-                    <div className="h-12 border-b border-slate-400 mb-1.5"></div>
-                    <p className="text-xs font-bold text-slate-900">
-                      {isKhmer ? "ហត្ថលេខាម្ចាស់ផ្ទះ / ហត្ថលេខាអ្នកគ្រប់គ្រង" : "Property Manager Signature"}
-                    </p>
-                    <p className="text-[10px] text-slate-400 mt-0.5">
-                      {isKhmer ? "កាលបរិច្ឆេទ" : "Date"}: ____ / ____ / ________
-                    </p>
-                  </div>
-                </div>
+                <UtilityReportDocument
+                  house={house}
+                  month={month}
+                  utilities={utilities}
+                  lang={lang}
+                  isPreview={true}
+                />
               </div>
             </div>
           </motion.div>
