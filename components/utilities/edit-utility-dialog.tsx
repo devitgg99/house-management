@@ -85,9 +85,24 @@ export function EditUtilityDialog({
     setMeterImagePreview(localPreview);
     setIsUploadingImage(true);
 
+    const originalSizeMB = (file.size / (1024 * 1024)).toFixed(2);
+    browserLogger.info("Utility", `Selected meter proof photo for update: "${file.name}" (${file.type || "unknown"}, ${originalSizeMB} MB)`);
+
     try {
-      // Auto-compress large / iPhone camera images before uploading
-      const fileToUpload = await compressImage(file);
+      // Auto-compress large / iPhone camera images before uploading (target <= 1.0 MB)
+      const fileToUpload = await compressImage(file, {
+        maxDimension: 1920,
+        quality: 0.8,
+        maxSizeMB: 1.0,
+      });
+
+      const compressedSizeMB = (fileToUpload.size / (1024 * 1024)).toFixed(2);
+      const ratio = file.size > 0 ? Math.round((1 - fileToUpload.size / file.size) * 100) : 0;
+      browserLogger.info(
+        "Utility",
+        `Compressed meter photo: "${fileToUpload.name}" (${compressedSizeMB} MB, ${ratio > 0 ? `saved ${ratio}%` : "original size"})`
+      );
+
       const uploadData = new FormData();
       uploadData.append("file", fileToUpload);
 
@@ -96,9 +111,16 @@ export function EditUtilityDialog({
       if (result.success && result.url) {
         const secureUrl = ensureHttps(result.url);
         setMeterImageUrl(secureUrl);
+        browserLogger.success("Utility", "Meter photo updated successfully", { url: secureUrl });
         toast.success("Meter photo updated");
       } else {
-        browserLogger.error("Utility", "Failed to upload meter image", { error: result.error, fileName: file.name });
+        browserLogger.error("Utility", "Failed to upload meter image", {
+          error: result.error,
+          fileName: file.name,
+          originalSizeMB,
+          compressedSizeMB,
+          networkType: (navigator as any)?.connection?.effectiveType || "unknown",
+        });
         toast.error("Upload failed", {
           description: result.error || "Failed to upload meter image",
         });

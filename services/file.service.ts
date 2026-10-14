@@ -16,23 +16,47 @@ const cleanPathString = (val?: any): string => {
 };
 
 export const UploadFileService = async (formData: FormData): Promise<FileUploadResponse> => {
-  try {
-    console.log("📤 Uploading file...");
+  const startTime = Date.now();
 
-    const res = await fetch(`${API_BASE_URL}/file/upload`, {
+  // Extract file info for backend logging
+  const fileEntry = formData.get("file");
+  let fileName = "unknown-file";
+  let fileSize = 0;
+  let fileType = "unknown";
+
+  if (fileEntry && typeof fileEntry === "object" && "size" in fileEntry) {
+    const f = fileEntry as File;
+    fileName = f.name || "unnamed";
+    fileSize = f.size || 0;
+    fileType = f.type || "unknown";
+  }
+
+  const fileSizeKB = (fileSize / 1024).toFixed(1);
+  const fileSizeMB = (fileSize / (1024 * 1024)).toFixed(2);
+  const targetUrl = `${API_BASE_URL}/file/upload`;
+
+  console.log(
+    `[Backend-Upload] 📤 Sending "${fileName}" (${fileType}, ${fileSizeKB} KB / ${fileSizeMB} MB) -> ${targetUrl}`
+  );
+
+  try {
+    const res = await fetch(targetUrl, {
       method: "POST",
       body: formData,
     });
 
-    let data: any;
+    const elapsed = Date.now() - startTime;
     const text = await res.text();
+    let data: any;
     try {
       data = JSON.parse(text);
     } catch {
       data = text;
     }
 
-    console.log("📥 Upload response:", res.status, data);
+    console.log(
+      `[Backend-Upload] 📥 Backend responded in ${elapsed}ms | HTTP ${res.status} ${res.statusText} | File: "${fileName}" (${fileSizeMB} MB)`
+    );
 
     // Look for file path / URL across common backend response schemas
     let rawPath: string | undefined;
@@ -83,6 +107,7 @@ export const UploadFileService = async (formData: FormData): Promise<FileUploadR
         }
       }
 
+      console.log(`[Backend-Upload] ✅ Upload succeeded: "${fileName}" -> ${finalUrl}`);
       return {
         success: true,
         url: finalUrl,
@@ -92,11 +117,25 @@ export const UploadFileService = async (formData: FormData): Promise<FileUploadR
 
     // If response was not OK and no file path could be extracted
     if (!res.ok) {
+      console.error(
+        `[Backend-Upload] ❌ Upload rejected (HTTP ${res.status} ${res.statusText}) for "${fileName}" (${fileSizeMB} MB). Backend response:`,
+        data
+      );
+
+      const errorMsg =
+        (data && typeof data === "object" && (data.message || data.error)) ||
+        (typeof data === "string" ? cleanPathString(data) : `Upload failed (HTTP ${res.status})`);
+
+      if (typeof errorMsg === "string" && /exceed|too large|size|limit/i.test(errorMsg)) {
+        console.error(
+          `[Backend-Upload] ⚠️ FILE SIZE LIMIT EXCEEDED: The file "${fileName}" (${fileSizeMB} MB) exceeded the backend server's maximum upload limit. Backend message: "${errorMsg}"`
+        );
+      }
+
       return {
         success: false,
-        error:
-          (data && typeof data === "object" && (data.message || data.error)) ||
-          (typeof data === "string" ? cleanPathString(data) : `Upload failed (${res.status})`),
+        error: errorMsg,
+        data: data,
       };
     }
 
@@ -110,7 +149,8 @@ export const UploadFileService = async (formData: FormData): Promise<FileUploadR
       data: data,
     };
   } catch (e) {
-    console.error("❌ Upload error:", e);
+    const elapsed = Date.now() - startTime;
+    console.error(`[Backend-Upload] ❌ Exception during upload for "${fileName}" after ${elapsed}ms:`, e);
     return {
       success: false,
       error: e instanceof Error ? e.message : "Network error or server is unreachable",

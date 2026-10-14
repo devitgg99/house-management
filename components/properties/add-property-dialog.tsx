@@ -15,7 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { AddPropertyAction } from "@/actions/property/PropertyAction";
-import { UploadFileService } from "@/services/file.service";
+import { UploadFileAction } from "@/actions/file/FileAction";
 import { browserLogger } from "@/lib/logger";
 import { isImageFile, compressImage } from "@/lib/image-compression";
 
@@ -70,7 +70,7 @@ export function AddPropertyDialog({
       const fileToUpload = await compressImage(file);
       const uploadFormData = new FormData();
       uploadFormData.append("file", fileToUpload);
-      const result = await UploadFileService(uploadFormData);
+      const result = await UploadFileAction(uploadFormData);
 
       if (result.success && result.url) {
         setFormData((prev) => ({ ...prev, houseImage: result.url! }));
